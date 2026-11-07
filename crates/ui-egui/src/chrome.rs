@@ -604,6 +604,10 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     if app.active.is_none() {
         return;
     }
+    // arif.14: Skip ribbon in integrated print mode (has its own controls)
+    if app.mode == Mode::Print {
+        return;
+    }
     let tools: &[(&str, &str, &str)] = match app.mode {
         Mode::Edit => &[
             ("file-pen-line", "Edit all", "edit.edit_text"),
@@ -676,29 +680,61 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         .exact_size(40.0)
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(6, 3)).stroke(Stroke::new(1.0, t.divider)))
         .show(ui, |ui| {
-            // arif.14: Add Undo/Redo buttons at the start of ribbon
+            // arif.14: Undo/Redo buttons with visible text labels
             if let Some(id) = app.active_ids().map(|(_, id)| id) {
                 if let Some(doc) = app.session.get(id) {
                     let can_undo = doc.can_undo().is_some();
                     let can_redo = doc.can_redo().is_some();
+                    let undo_text = tl!("Geri Al").to_string();
+                    let redo_text = tl!("Yinele").to_string();
                     let undo_tip = if let Some(label) = doc.undo_label() {
                         crate::i18n::fmt(tl!("Undo {}"), &[("edit", label.as_str())])
                     } else {
-                        tl!("Geri Al").to_string()
+                        undo_text.clone()
                     };
                     let redo_tip = if let Some(label) = doc.redo_label() {
                         crate::i18n::fmt(tl!("Redo {}"), &[("edit", label.as_str())])
                     } else {
-                        tl!("Yinele").to_string()
+                        redo_text.clone()
                     };
 
-                    if ui.add_enabled_ui(can_undo, |ui| icons::button(ui, "undo-2", 32.0, false, &undo_tip)).inner.on_disabled_hover_text(tl!("Nothing to undo")).clicked() {
+                    // Undo button with icon + text
+                    let undo_clicked = ui.add_enabled_ui(can_undo, |ui| {
+                        let font = theme::regular(12.0);
+                        let text_w = ui.fonts_mut(|f| f.layout_no_wrap(undo_text.clone(), font.clone(), t.text).size().x);
+                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(20.0 + 4.0 + text_w + 8.0, 32.0), egui::Sense::click());
+                        let press = theme::Press::track(ui, &resp);
+                        press.wash(ui, rect, 4, false);
+                        let body = rect.translate(press.offset());
+                        icons::paint(ui, egui::Rect::from_min_size(egui::pos2(body.left() + 4.0, body.center().y - 10.0), egui::vec2(20.0, 20.0)), "undo-2", 16.0, if can_undo { t.icon } else { t.icon.gamma_multiply(0.4) });
+                        ui.painter().text(egui::pos2(body.left() + 28.0, body.center().y), egui::Align2::LEFT_CENTER, &undo_text, font, if can_undo { t.text } else { t.text.gamma_multiply(0.4) });
+                        resp
+                    }).inner.on_hover_text(&undo_tip).on_disabled_hover_text(tl!("Nothing to undo")).clicked();
+
+                    if undo_clicked {
                         app.execute("edit.undo");
                     }
-                    if ui.add_enabled_ui(can_redo, |ui| icons::button(ui, "redo-2", 32.0, false, &redo_tip)).inner.on_disabled_hover_text(tl!("Nothing to redo")).clicked() {
+
+                    ui.add_space(4.0);
+
+                    // Redo button with icon + text
+                    let redo_clicked = ui.add_enabled_ui(can_redo, |ui| {
+                        let font = theme::regular(12.0);
+                        let text_w = ui.fonts_mut(|f| f.layout_no_wrap(redo_text.clone(), font.clone(), t.text).size().x);
+                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(20.0 + 4.0 + text_w + 8.0, 32.0), egui::Sense::click());
+                        let press = theme::Press::track(ui, &resp);
+                        press.wash(ui, rect, 4, false);
+                        let body = rect.translate(press.offset());
+                        icons::paint(ui, egui::Rect::from_min_size(egui::pos2(body.left() + 4.0, body.center().y - 10.0), egui::vec2(20.0, 20.0)), "redo-2", 16.0, if can_redo { t.icon } else { t.icon.gamma_multiply(0.4) });
+                        ui.painter().text(egui::pos2(body.left() + 28.0, body.center().y), egui::Align2::LEFT_CENTER, &redo_text, font, if can_redo { t.text } else { t.text.gamma_multiply(0.4) });
+                        resp
+                    }).inner.on_hover_text(&redo_tip).on_disabled_hover_text(tl!("Nothing to redo")).clicked();
+
+                    if redo_clicked {
                         app.execute("edit.redo");
                     }
-                    ui.add_space(8.0);
+
+                    ui.add_space(12.0);
                     // Visual separator
                     let (r, _) = ui.allocate_exact_size(vec2(1.0, 28.0), egui::Sense::hover());
                     ui.painter().rect_filled(r, 0.0, t.divider);

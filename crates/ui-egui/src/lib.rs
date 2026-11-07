@@ -3228,11 +3228,12 @@ impl PdfCraftApp {
             .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(16, 12)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    // Back button
-                    if icons::button(ui, "arrow-left", 32.0, false, tl!("Back to document")).clicked() {
+                    // Back button with explicit text label
+                    let back_text = tl!("Belgeye dön").to_string();
+                    if widgets::pill_button(ui, &back_text, false).clicked() {
                         self.switch_mode(Mode::AllTools, false);
                     }
-                    ui.add_space(8.0);
+                    ui.add_space(12.0);
                     ui.label(egui::RichText::new(tl!("Print")).font(theme::semibold(18.0)));
                 });
                 ui.add_space(12.0);

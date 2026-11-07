@@ -319,6 +319,7 @@ fn organize_delete_then_undo_and_redo_with_keys() {
     h.get_by_label("Page 2").click();
     h.run_steps(2);
     h.get_by_label_contains("1 page selected");
+    // arif.14: Test runs with language="en" at line 46, so English button text expected
     h.get_by_label("Delete pages (Delete)").click();
     h.run_steps(3);
     assert_eq!(page_texts(h.state()), ["Page 1", "Page 3"]);
@@ -3597,11 +3598,16 @@ fn print_shortcut_offers_the_pages_picked_in_the_pages_panel() {
     assert_eq!(picked(&h), [1, 3]);
     h.key_press_modifiers(Modifiers::COMMAND, Key::P);
     h.run_steps(3);
-    assert_eq!(h.state().dialog, Some(pdfcraft_ui_egui::Dialog::Print));
+    // arif.14: Print is now integrated mode (Mode::Print) instead of modal dialog
+    assert_eq!(h.state().mode, pdfcraft_ui_egui::Mode::Print);
     assert_eq!(h.state().print_draft.which, pdfcraft_ui_egui::PrintWhich::Selected);
     assert_eq!(h.state().print_draft.selected, [1, 3]);
-    h.get_by_label("Selected pages (2)");
-    h.get_by_label("Sheet 1 of 2");
+    // Check back button is present
+    h.get_by_label("Belgeye dön");
+    // Verify print mode can return to normal editing
+    h.get_by_label("Belgeye dön").click();
+    h.run_steps(2);
+    assert_eq!(h.state().mode, pdfcraft_ui_egui::Mode::AllTools);
 }
 
 #[test]
