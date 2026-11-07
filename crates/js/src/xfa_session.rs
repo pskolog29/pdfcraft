@@ -1,9 +1,8 @@
 //! One script engine for a whole form event. Every script of the event runs on one thread
 //! (with the script stack), each in a fresh JavaScript context on a fresh copy of the form as
 //! the caller holds it, so scripts can't see each other's variables or objects and a script
-//! that failed halfway leaves no state behind in the engine; what a script changed (up to its
-//! error, when it failed) reaches the next one only through the caller, which applies the
-//! effects and sends the form as it then is. Before,
+//! that failed halfway leaves nothing behind; what a script changed reaches the next one only
+//! through the caller, which applies the effects and sends the form as it then is. Before,
 //! every script also got a thread of its own and the caller rebuilt the form for each: a form
 //! with hundreds of calculations spent its open-time budget on that.
 //!
@@ -17,18 +16,6 @@ use crate::xfa::{XfaDoc, XfaEvent, XfaNode, XfaOutcome};
 /// Tests: milliseconds the engine is made to take before it is ready for a script.
 #[cfg(test)]
 pub(crate) static START_DELAY_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-
-std::thread_local! {
-    static ENGINES_STARTED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-}
-
-/// How many script engine threads the sessions made on this thread have started, for
-/// diagnostics and tests: an event's scripts share one, so opening a form with hundreds of
-/// calculations starts one. Per thread, so a caller counting its own events is not disturbed
-/// by forms on other threads. Always 0 on wasm, where the scripts run on the caller's thread.
-pub fn engines_started() -> u64 {
-    ENGINES_STARTED.with(std::cell::Cell::get)
-}
 
 /// What one script run needs.
 #[derive(Clone, Debug)]
@@ -70,7 +57,7 @@ fn run_script(s: Script, doc: &XfaDoc, started: &dyn Fn()) -> XfaOutcome {
 #[cfg(not(target_arch = "wasm32"))]
 mod native {
     use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
     use super::{Script, run_script};
     use crate::xfa::{ENGINE_START_LIMIT, XfaDoc, XfaOutcome};
@@ -95,20 +82,11 @@ mod native {
         worker: Option<Worker>,
         /// A script ran past its limit: its thread is left to it and nothing more runs.
         dead: Option<String>,
-        /// How long the engine has to be ready for a script ([`ENGINE_START_LIMIT`] by default).
-        start_limit: Duration,
     }
 
     impl XfaSession {
         pub fn new(doc: XfaDoc) -> XfaSession {
-            XfaSession { doc, worker: None, dead: None, start_limit: ENGINE_START_LIMIT }
-        }
-
-        /// Multiply the time the engine has to be ready for a script by `factor` (a script's
-        /// own time is [`Script::timeout`]).
-        pub fn with_time_scale(mut self, factor: u32) -> XfaSession {
-            self.start_limit = ENGINE_START_LIMIT.saturating_mul(factor);
-            self
+            XfaSession { doc, worker: None, dead: None }
         }
 
         /// Why nothing more runs, once a script was abandoned.
@@ -136,12 +114,11 @@ mod native {
                     }
                 });
                 spawned.map_err(|e| format!("the script engine could not start: {e}"))?;
-                super::ENGINES_STARTED.with(|n| n.set(n.get().saturating_add(1)));
-                match from.recv_timeout(self.start_limit) {
+                match from.recv_timeout(ENGINE_START_LIMIT) {
                     Ok(Reply::Ready) => {}
                     Ok(_) => return Err("the script engine answered out of turn".into()),
                     Err(RecvTimeoutError::Timeout) => {
-                        return Err(format!("the script engine took longer than {:.0} s to start", self.start_limit.as_secs_f64()));
+                        return Err(format!("the script engine took longer than {:.0} s to start", ENGINE_START_LIMIT.as_secs_f64()));
                     }
                     Err(RecvTimeoutError::Disconnected) => return Err("the script engine stopped with an internal error".into()),
                 }
@@ -151,9 +128,8 @@ mod native {
         }
 
         /// Run one script, waiting at most its `timeout` from when the engine is ready for it
-        /// (the engine itself gets [`ENGINE_START_LIMIT`] to be ready, unless
-        /// [`XfaSession::with_time_scale`] changed it); past that it is abandoned on its thread
-        /// and the session is dead.
+        /// (the engine itself gets [`ENGINE_START_LIMIT`] to be ready); past that it is
+        /// abandoned on its thread and the session is dead.
         pub fn run(&mut self, script: Script) -> XfaOutcome {
             let abandoned = |why: String| XfaOutcome { error: Some(why), abandoned: true, ..Default::default() };
             let failed = |why: String| XfaOutcome { error: Some(why), ..Default::default() };
@@ -161,7 +137,6 @@ mod native {
                 return abandoned(why.clone());
             }
             let timeout = script.timeout;
-            let start_limit = self.start_limit;
             let worker = match self.worker() {
                 Ok(w) => w,
                 Err(why) => return failed(why),
@@ -172,7 +147,7 @@ mod native {
                 return failed("the script engine stopped with an internal error".into());
             }
             // The engine's start, then the script's own time.
-            let (mut running, mut limit) = (false, start_limit);
+            let (mut running, mut limit) = (false, ENGINE_START_LIMIT);
             let mut deadline = Instant::now().checked_add(limit);
             loop {
                 let left = deadline.map_or(limit, |d| d.saturating_duration_since(Instant::now()));
@@ -191,7 +166,7 @@ mod native {
                         let why = if running {
                             format!("the script ran longer than {:.1} s and was abandoned", timeout.as_secs_f64())
                         } else {
-                            format!("the script engine took longer than {:.0} s to start", start_limit.as_secs_f64())
+                            format!("the script engine took longer than {:.0} s to start", ENGINE_START_LIMIT.as_secs_f64())
                         };
                         self.dead = Some(why.clone());
                         // Dropping the sender ends the thread's loop once the script is done.
@@ -221,11 +196,6 @@ mod native {
     impl XfaSession {
         pub fn new(doc: XfaDoc) -> XfaSession {
             XfaSession { doc }
-        }
-
-        /// No engine to start on wasm: nothing to scale.
-        pub fn with_time_scale(self, _factor: u32) -> XfaSession {
-            self
         }
 
         pub fn dead(&self) -> Option<&str> {

@@ -32,11 +32,7 @@ pub mod dict;
 pub mod stream;
 
 /// A trait for PDF objects.
-pub(crate) trait ObjectLike<'a>: TryFrom<Object<'a>> + Readable<'a> + Debug + Clone {
-    /// PdfCraft patch (32): whether this is several items of an array, read one by one (a tuple).
-    /// Such a thing can't itself be given by reference, so one at its start is its first item's.
-    const GROUP: bool = false;
-}
+pub(crate) trait ObjectLike<'a>: TryFrom<Object<'a>> + Readable<'a> + Debug + Clone {}
 
 /// A trait for PDF objects that can be borrowed directly from an [`Object`].
 pub(crate) trait ObjectRefLike<'a>: Sized {

@@ -1,7 +1,7 @@
 //! Shared command/inspection/preview entry points, using the existing confined tool path.
 use serde_json::{Value, json};
 
-use crate::{Args, Automation, Content, Result, ToolError, failed, info, rendered_content, tools};
+use crate::{Args, Automation, Content, Result, ToolError, encode_png, failed, info, tools};
 use pdfcraft_engine::commands;
 use pdfcraft_render::{RenderRequest, RequestKind};
 
@@ -108,8 +108,7 @@ impl Automation {
         Ok(json!({"documents":self.session.docs().iter().map(info).collect::<Vec<_>>()}))
     }
 
-    /// A bounded PNG of the page, with its render warnings after it as `page_render` gives them.
-    pub(crate) fn render_preview(&mut self, args: &Args) -> Result<Vec<Content>> {
+    pub(crate) fn render_preview(&mut self, args: &Args) -> Result<Content> {
         let id = if args.opt_int("doc")?.is_some() {
             self.doc(args)?.id
         } else {
@@ -135,6 +134,7 @@ impl Automation {
         if let Some(error) = out.error {
             return Err(failed(error));
         }
-        rendered_content(&out, page)
+        let data = encode_png(out.width, out.height, &out.rgba)?;
+        Ok(Content::Png { data, width: out.width, height: out.height })
     }
 }

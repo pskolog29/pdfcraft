@@ -32,7 +32,6 @@ This crate has one optional feature:
 mod log;
 
 mod cache;
-mod cmyk_group;
 mod context;
 mod convert;
 mod device;
@@ -54,7 +53,6 @@ pub mod shading;
 pub mod util;
 
 pub use cache::CacheKey;
-pub use cmyk_group::CmykGroup;
 pub use context::*;
 pub use device::*;
 pub use function::Function;

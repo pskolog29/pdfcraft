@@ -168,10 +168,9 @@ impl<'a> Type3<'a> {
             is_shape_glyph
         };
 
-        // PdfCraft patch: context clips and shading bounds are in device space; FontBBox is in glyph space.
         let mut context = Context::new_with(
             state.ctm,
-            root_transform.transform_rect_bbox(self.font_bbox),
+            self.font_bbox,
             &glyph.cache,
             glyph.xref,
             glyph.settings.clone(),

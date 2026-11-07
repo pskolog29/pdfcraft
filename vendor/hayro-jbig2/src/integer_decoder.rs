@@ -70,8 +70,7 @@ impl IntegerDecoder {
         if s == 0 {
             Some(v as i32)
         } else if v > 0 {
-            // Wrapping: `V` can be 2^31, whose negative is `i32::MIN`, as the cast already reads it.
-            Some((v as i32).wrapping_neg())
+            Some(-(v as i32))
         } else {
             None
         }
