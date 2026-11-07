@@ -2172,7 +2172,7 @@ impl PdfCraftApp {
             Mode::Annotate => LeftPanel::Tool("comment"),
             Mode::Page => LeftPanel::Tool("organize"),
             Mode::Protect | Mode::Sign => LeftPanel::Tool("protect"),
-            Mode::Print => LeftPanel::Closed,
+            Mode::Print => LeftPanel::AllTools,
             Mode::Read | Mode::AllTools => LeftPanel::AllTools,
         };
         if mode == Mode::Edit {
@@ -3221,11 +3221,11 @@ impl PdfCraftApp {
         let t = theme::Tokens::get(ui.ctx());
 
         // Settings in left panel, preview on the right (Word-like)
-        egui::SidePanel::left("print_settings")
+        egui::Panel::left("print_settings")
             .resizable(false)
             .exact_width(380.0)
             .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(16, 12)))
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     // Back button
                     if icons::button(ui, "arrow-left", 32.0, false, tl!("Back to document")).clicked() {
@@ -3276,7 +3276,7 @@ impl PdfCraftApp {
                         let settings = self.print_draft.settings(sizes.len(), &labels);
                         let label = if self.print_draft.printer.is_some() || looking { tl!("Print") } else { tl!("Save as PDF") };
 
-                        if ui.add_enabled(settings.is_ok() && !looking, widgets::print_primary_button(ui, label)).clicked() {
+                        if ui.add_enabled_ui(settings.is_ok() && !looking, |ui| widgets::print_primary_button(ui, label)).inner.clicked() {
                             self.print_now();
                             self.switch_mode(Mode::AllTools, false);
                         }

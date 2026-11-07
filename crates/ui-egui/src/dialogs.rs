@@ -61,7 +61,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let mut bulk_field_props_now = false;
     let mut redact_now: Option<Dialog> = None;
     let mut import_words = false;
-    let mut print_go = false;
+    let _print_go = false;
     let mut revert_now = false;
     let mut overwrite_now = false;
     let mut overwrite_elsewhere = false;

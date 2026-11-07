@@ -681,20 +681,20 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     let can_undo = doc.can_undo().is_some();
                     let can_redo = doc.can_redo().is_some();
                     let undo_tip = if let Some(label) = doc.undo_label() {
-                        crate::i18n::fmt(tl!("Undo {}"), &[("edit", label.as_ref())])
+                        crate::i18n::fmt(tl!("Undo {}"), &[("edit", label.as_str())])
                     } else {
                         tl!("Geri Al").to_string()
                     };
                     let redo_tip = if let Some(label) = doc.redo_label() {
-                        crate::i18n::fmt(tl!("Redo {}"), &[("edit", label.as_ref())])
+                        crate::i18n::fmt(tl!("Redo {}"), &[("edit", label.as_str())])
                     } else {
                         tl!("Yinele").to_string()
                     };
 
-                    if ui.add_enabled(can_undo, icons::Button::new("undo-2", 32.0).build()).on_hover_text(&undo_tip).on_disabled_hover_text(tl!("Nothing to undo")).clicked() {
+                    if ui.add_enabled_ui(can_undo, |ui| icons::button(ui, "undo-2", 32.0, false, &undo_tip)).inner.on_disabled_hover_text(tl!("Nothing to undo")).clicked() {
                         app.execute("edit.undo");
                     }
-                    if ui.add_enabled(can_redo, icons::Button::new("redo-2", 32.0).build()).on_hover_text(&redo_tip).on_disabled_hover_text(tl!("Nothing to redo")).clicked() {
+                    if ui.add_enabled_ui(can_redo, |ui| icons::button(ui, "redo-2", 32.0, false, &redo_tip)).inner.on_disabled_hover_text(tl!("Nothing to redo")).clicked() {
                         app.execute("edit.redo");
                     }
                     ui.add_space(8.0);

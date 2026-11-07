@@ -1440,9 +1440,9 @@ pub(crate) fn settings_panel(
     t: &Tokens,
     sizes: &[(f64, f64)],
     labels: &[String],
-    page_count: usize,
+    _page_count: usize,
 ) {
-    let settings = d.settings(sizes.len(), labels);
+    let _settings = d.settings(sizes.len(), labels);
 
     egui::ScrollArea::vertical().id_salt("print-settings-scroll").auto_shrink([false, true]).show(ui, |ui| {
         let (col_x0, col_x1) = (ui.cursor().left(), ui.cursor().left() + ui.available_width());
