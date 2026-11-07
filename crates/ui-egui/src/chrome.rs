@@ -675,6 +675,36 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         .exact_size(40.0)
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(6, 3)).stroke(Stroke::new(1.0, t.divider)))
         .show(ui, |ui| {
+            // arif.14: Add Undo/Redo buttons at the start of ribbon
+            if let Some(id) = app.active_ids().map(|(_, id)| id) {
+                if let Some(doc) = app.session.get(id) {
+                    let can_undo = doc.can_undo().is_some();
+                    let can_redo = doc.can_redo().is_some();
+                    let undo_tip = if let Some(label) = doc.undo_label() {
+                        crate::i18n::fmt(tl!("Undo {}"), &[("edit", label.as_ref())])
+                    } else {
+                        tl!("Geri Al").to_string()
+                    };
+                    let redo_tip = if let Some(label) = doc.redo_label() {
+                        crate::i18n::fmt(tl!("Redo {}"), &[("edit", label.as_ref())])
+                    } else {
+                        tl!("Yinele").to_string()
+                    };
+
+                    if ui.add_enabled(can_undo, icons::Button::new("undo-2", 32.0).build()).on_hover_text(&undo_tip).on_disabled_hover_text(tl!("Nothing to undo")).clicked() {
+                        app.execute("edit.undo");
+                    }
+                    if ui.add_enabled(can_redo, icons::Button::new("redo-2", 32.0).build()).on_hover_text(&redo_tip).on_disabled_hover_text(tl!("Nothing to redo")).clicked() {
+                        app.execute("edit.redo");
+                    }
+                    ui.add_space(8.0);
+                    // Visual separator
+                    let (r, _) = ui.allocate_exact_size(vec2(1.0, 28.0), egui::Sense::hover());
+                    ui.painter().rect_filled(r, 0.0, t.divider);
+                    ui.add_space(8.0);
+                }
+            }
+
             // arif.13 final: icon LEFT + label RIGHT on one line; full labels, no scrollbar, tighten gaps to fit.
             let avail = ui.available_width().max(1.0);
             let tips: Vec<String> = tools.iter().map(|(_, label, _)| tl!(*label).to_string()).collect();

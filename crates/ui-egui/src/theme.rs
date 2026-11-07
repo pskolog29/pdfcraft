@@ -471,12 +471,12 @@ pub fn apply(ctx: &egui::Context, kind: ThemeKind) {
         s.spacing.item_spacing = egui::vec2(8.0, 6.0);
         s.spacing.button_padding = egui::vec2(10.0, 5.0);
         s.spacing.menu_margin = egui::Margin::same(6);
-        // arif.9: kalın, kolay tutulur sayfa scroll çubuğu (floating ince çizgi yerine)
-        s.spacing.scroll.bar_width = 15.0;
+        // arif.14: ince sayfa scroll çubuğu (10px yerine 15px)
+        s.spacing.scroll.bar_width = 10.0;
         s.spacing.scroll.handle_min_length = 32.0;
         s.spacing.scroll.bar_inner_margin = 2.0;
         s.spacing.scroll.floating = false;
-        s.spacing.scroll.floating_width = 15.0;
+        s.spacing.scroll.floating_width = 10.0;
         s.spacing.scroll.foreground_color = true;
         s.text_styles.insert(egui::TextStyle::Body, regular(13.0));
         s.text_styles.insert(egui::TextStyle::Button, regular(13.0));

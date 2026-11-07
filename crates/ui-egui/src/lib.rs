@@ -177,6 +177,9 @@ pub enum Mode {
     /// Legacy alias for old preference files that stored "sign".
     #[serde(rename = "sign")]
     Sign,
+    /// Print — integrated Word-like print screen (arif.14).
+    #[serde(rename = "print")]
+    Print,
 }
 
 impl Mode {
@@ -190,6 +193,7 @@ impl Mode {
             "page" => Some(Self::Page),
             "protect" => Some(Self::Protect),
             "sign" => Some(Self::Sign),
+            "print" => Some(Self::Print),
             _ => None,
         }
     }
@@ -2168,6 +2172,7 @@ impl PdfCraftApp {
             Mode::Annotate => LeftPanel::Tool("comment"),
             Mode::Page => LeftPanel::Tool("organize"),
             Mode::Protect | Mode::Sign => LeftPanel::Tool("protect"),
+            Mode::Print => LeftPanel::Closed,
             Mode::Read | Mode::AllTools => LeftPanel::AllTools,
         };
         if mode == Mode::Edit {
@@ -2353,9 +2358,9 @@ impl PdfCraftApp {
             self.animation_effects = effects;
         }
         if let Ok(mode) = serde_json::from_value::<Mode>(v["default_mode"].clone()) {
-            self.default_mode = if mode == Mode::AllTools { Mode::Read } else { mode };
+            self.default_mode = if mode == Mode::AllTools || mode == Mode::Print { Mode::Read } else { mode };
         }
-        if self.mode == Mode::AllTools {
+        if self.mode == Mode::AllTools || self.mode == Mode::Print {
             self.mode = Mode::Read;
         }
         if let Some((layout, continuous)) = v["default_layout"].as_str().and_then(canvas::parse_display_token) {
@@ -3172,7 +3177,10 @@ impl eframe::App for PdfCraftApp {
         }
         let t = theme::Tokens::get(&ctx);
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| {
-            if self.mode == Mode::Read {
+            if self.mode == Mode::Print {
+                // arif.14: Integrated print mode
+                self.show_integrated_print(ui);
+            } else if self.mode == Mode::Read {
                 match self.active {
                     None if self.combine_showing() => combine_ui::page(self, ui),
                     None => home::show(self, ui),
@@ -3195,6 +3203,92 @@ impl eframe::App for PdfCraftApp {
 }
 
 impl PdfCraftApp {
+    /// arif.14: Show integrated print UI (settings left, preview right, back button)
+    fn show_integrated_print(&mut self, ui: &mut egui::Ui) {
+        let Some((i, id)) = self.active_ids() else {
+            // No document open: return to all tools
+            self.switch_mode(Mode::AllTools, false);
+            return;
+        };
+
+        if self.print_draft.handling == print_ui::Handling::Label {
+            self.read_label_crops(id);
+        }
+
+        let Some(doc) = self.session.get(id) else { return };
+        let sizes: Vec<(f64, f64)> = doc.info.pages.iter().map(|p| (p.width as f64, p.height as f64)).collect();
+        let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
+        let t = theme::Tokens::get(ui.ctx());
+
+        // Settings in left panel, preview on the right (Word-like)
+        egui::SidePanel::left("print_settings")
+            .resizable(false)
+            .exact_width(380.0)
+            .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(16, 12)))
+            .show_inside(ui, |ui| {
+                ui.horizontal(|ui| {
+                    // Back button
+                    if icons::button(ui, "arrow-left", 32.0, false, tl!("Back to document")).clicked() {
+                        self.switch_mode(Mode::AllTools, false);
+                    }
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new(tl!("Print")).font(theme::semibold(18.0)));
+                });
+                ui.add_space(12.0);
+                print_ui::settings_panel(ui, &mut self.print_draft, &t, &sizes, &labels, doc.info.pages.len());
+            });
+
+        // Preview and controls on the right
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(t.pasteboard).inner_margin(egui::Margin::symmetric(16, 12)))
+            .show_inside(ui, |ui| {
+                let layout = print_ui::PrintLayout {
+                    left_w: 0.0,
+                    preview_w: ui.available_width().max(400.0),
+                    preview_h: ui.available_height().max(400.0) - 80.0,
+                };
+
+                let rasters = print_ui::preview_rasters(
+                    &self.print_draft,
+                    &sizes,
+                    &labels,
+                    ui.ctx().pixels_per_point(),
+                    ui.ctx().input(|inp| inp.max_texture_side) as f32,
+                    &layout,
+                );
+
+                let view = &mut self.views[i];
+                view.set_print_grayscale(self.print_draft.grayscale);
+                view.queue_print_previews(&rasters);
+
+                print_ui::preview_panel(ui, &mut self.print_draft, &t, &sizes, &labels, &layout, &mut |p| {
+                    view.need_thumbnail(p, true);
+                    view.page_preview(p)
+                });
+
+                ui.add_space(12.0);
+
+                // Print/Save button at the bottom
+                ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        let looking = print_ui::still_looking(&self.print_draft);
+                        let settings = self.print_draft.settings(sizes.len(), &labels);
+                        let label = if self.print_draft.printer.is_some() || looking { tl!("Print") } else { tl!("Save as PDF") };
+
+                        if ui.add_enabled(settings.is_ok() && !looking, widgets::print_primary_button(ui, label)).clicked() {
+                            self.print_now();
+                            self.switch_mode(Mode::AllTools, false);
+                        }
+
+                        if widgets::print_cancel_button(ui, tl!("Cancel")).clicked() {
+                            self.switch_mode(Mode::AllTools, false);
+                        }
+                    });
+                });
+            });
+    }
+
     fn finish_render_frame(&mut self, ctx: &egui::Context) {
         // The Combine grid's thumbnails, whichever tab shows (renders under way still finish).
         self.combine_thumbs_frame(ctx);
