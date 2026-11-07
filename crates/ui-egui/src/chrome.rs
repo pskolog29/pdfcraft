@@ -657,6 +657,7 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
             ("bookmark", "Bookmarks", "view.bookmarks"),
             ("files", "Thumbnails", "view.thumbnails"),
         ],
+        Mode::Print => &[],
         Mode::AllTools => &[
             ("file-pen-line", "Edit all", "edit.edit_text"),
             ("type", "Add text", "edit.text"),

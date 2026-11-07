@@ -3218,12 +3218,13 @@ impl PdfCraftApp {
         let Some(doc) = self.session.get(id) else { return };
         let sizes: Vec<(f64, f64)> = doc.info.pages.iter().map(|p| (p.width as f64, p.height as f64)).collect();
         let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
+        let page_count = doc.info.pages.len();
         let t = theme::Tokens::get(ui.ctx());
 
         // Settings in left panel, preview on the right (Word-like)
         egui::Panel::left("print_settings")
             .resizable(false)
-            .exact_width(380.0)
+            .default_size(380.0)
             .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(16, 12)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
@@ -3235,7 +3236,7 @@ impl PdfCraftApp {
                     ui.label(egui::RichText::new(tl!("Print")).font(theme::semibold(18.0)));
                 });
                 ui.add_space(12.0);
-                print_ui::settings_panel(ui, &mut self.print_draft, &t, &sizes, &labels, doc.info.pages.len());
+                print_ui::settings_panel(ui, &mut self.print_draft, &t, &sizes, &labels, page_count);
             });
 
         // Preview and controls on the right
