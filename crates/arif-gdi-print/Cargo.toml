@@ -1,0 +1,18 @@
+[package]
+name = "arif-gdi-print"
+description = "Arif Pdf Editör: GDI print fallback for Windows drivers that refuse the Direct2D/XPS path"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+# Not under the workspace lints: this crate is the one place that needs `unsafe` (Win32 GDI calls).
+
+[dependencies]
+pdfcraft-engine = { workspace = true }
+pdfcraft-render = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winsafe = { version = "0.0.29", default-features = false, features = ["winspool"] }
+windows = { version = "0.62", default-features = false, features = ["std", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Graphics_Printing", "Win32_Storage_Xps"] }
