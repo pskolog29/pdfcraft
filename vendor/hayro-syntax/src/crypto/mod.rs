@@ -74,11 +74,9 @@ pub(crate) enum Decryptor {
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) enum DecryptionTarget<'a> {
+pub(crate) enum DecryptionTarget {
     String,
     Stream,
-    /// PdfCraft patch (30): a stream that names its own crypt filter.
-    NamedStream(&'a str),
 }
 
 impl Decryptor {
@@ -86,7 +84,7 @@ impl Decryptor {
         &self,
         id: ObjectIdentifier,
         data: &[u8],
-        target: DecryptionTarget<'_>,
+        target: DecryptionTarget,
     ) -> Option<Vec<u8>> {
         match self {
             Self::None => Some(data.to_vec()),
@@ -95,8 +93,6 @@ impl Decryptor {
                 let crypt_dict = match target {
                     DecryptionTarget::String => dict.string_filter,
                     DecryptionTarget::Stream => dict.stream_filter,
-                    // `/Identity` isn't in the table, and a name it hasn't got reads as that.
-                    DecryptionTarget::NamedStream(name) => dict.named.get(name).copied().unwrap_or(CryptDictionary::identity(0)),
                 };
 
                 match crypt_dict.cfm {
@@ -296,12 +292,10 @@ fn decrypt_rc_aes(
     with_key(final_key)
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub(crate) struct DecryptorData {
     stream_filter: CryptDictionary,
     string_filter: CryptDictionary,
-    /// PdfCraft patch (30): `/CF`, for the streams that name a filter of their own.
-    named: HashMap<String, CryptDictionary>,
 }
 
 impl DecryptorData {
@@ -318,23 +312,16 @@ impl DecryptorData {
             }
         }
 
-        // PdfCraft patch (30): `/Identity` is never an entry of `/CF`, whatever a file puts there,
-        // and `/StmF` and `/StrF` are optional, naming it by default (ISO 32000-2 Table 20).
-        mappings.remove("Identity");
-        let identity = CryptDictionary::identity(default_length);
-        let stm_f = dict
-            .get::<Name<'_>>(STM_F)
-            .and_then(|n| mappings.get(n.as_str()).copied())
-            .unwrap_or(identity);
-        let str_f = dict
-            .get::<Name<'_>>(STR_F)
-            .and_then(|n| mappings.get(n.as_str()).copied())
-            .unwrap_or(identity);
+        let stm_f = *mappings
+            .get(dict.get::<Name<'_>>(STM_F)?.as_str())
+            .unwrap_or(&CryptDictionary::identity(default_length));
+        let str_f = *mappings
+            .get(dict.get::<Name<'_>>(STR_F)?.as_str())
+            .unwrap_or(&CryptDictionary::identity(default_length));
 
         Some(Self {
             stream_filter: stm_f,
             string_filter: str_f,
-            named: mappings,
         })
     }
 }

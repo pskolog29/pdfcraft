@@ -144,8 +144,7 @@ impl StripGenerator {
     /// Generate the strips for a stroked path.
     pub fn generate_stroked_path(
         &mut self,
-        // PdfCraft patch: `Clone` for `flatten::stroke`.
-        path: impl IntoIterator<Item = PathEl> + Clone,
+        path: impl IntoIterator<Item = PathEl>,
         stroke: &Stroke,
         transform: Affine,
         aliasing_threshold: Option<u8>,

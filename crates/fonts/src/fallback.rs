@@ -156,7 +156,8 @@ impl Substitution {
 fn script_for(ordering: &str) -> Option<&'static str> {
     match ordering {
         "Japan1" => Some("Jpan"),
-        // Registered orderings the chain maps to no craft-fonts face.
+        // Registered orderings we have no openly licensed face for. AGENTS.md 1.1 rules out
+        // Source Han and Noto CJK (Source Han rebranded), which is why these have none.
         "GB1" | "CNS1" | "Korea1" | "KR" => Some(""),
         _ => None,
     }
