@@ -82,8 +82,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let modal = widgets::show_modal(ctx, "dialog", |ui| {
         ui.set_width(match dialog {
             Dialog::Properties(_) => 640.0,
-            // arif.13: JoPDF-like wide print dialog (preview left + settings right).
-            Dialog::Print => crate::print_ui::PrintLayout::for_screen(ui.ctx().content_rect().size()).width().clamp(720.0, 1280.0),
+            // arif.14: Print is now an integrated mode, not a modal dialog
+            Dialog::Print => return,
             Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
             Dialog::About => 780.0,
             _ => 520.0,
@@ -832,35 +832,8 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
                 return;
             }
             Dialog::Print => {
-                let Some((i, id)) = app.active_ids() else {
-                    close = true;
-                    return;
-                };
-                if app.print_draft.handling == crate::print_ui::Handling::Label {
-                    app.read_label_crops(id);
-                }
-                let Some(doc) = app.session.get(id) else { return };
-                let sizes: Vec<(f64, f64)> = doc.info.pages.iter().map(|p| (p.width as f64, p.height as f64)).collect();
-                let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
-                // Arif Pdf Editör: a wide (landscape) dialog; the preview takes the room the settings leave.
-                let layout = crate::print_ui::PrintLayout::for_screen(ui.ctx().content_rect().size());
-                let rasters = crate::print_ui::preview_rasters(
-                    &app.print_draft,
-                    &sizes,
-                    &labels,
-                    ui.ctx().pixels_per_point(),
-                    ui.ctx().input(|i| i.max_texture_side) as f32,
-                    &layout,
-                );
-                let view = &mut app.views[i];
-                view.set_print_grayscale(app.print_draft.grayscale);
-                view.queue_print_previews(&rasters);
-                let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &sizes, &labels, &layout, &mut |p| {
-                    view.need_thumbnail(p, true);
-                    view.page_preview(p)
-                });
-                print_go = go;
-                close = go || cancel;
+                // arif.14: Print is now an integrated mode, handled in the main UI
+                close = true;
                 return;
             }
             Dialog::RemoveHidden => {
