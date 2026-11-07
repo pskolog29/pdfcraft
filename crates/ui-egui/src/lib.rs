@@ -3247,10 +3247,13 @@ impl PdfCraftApp {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(t.pasteboard).inner_margin(egui::Margin::symmetric(16, 12)))
             .show_inside(ui, |ui| {
+                // arif.14 correction6: Ensure preview fits available space at narrow widths
+                let available_w = ui.available_width().max(200.0);
+                let available_h = ui.available_height().max(200.0);
                 let layout = print_ui::PrintLayout {
                     left_w: 0.0,
-                    preview_w: ui.available_width().max(400.0),
-                    preview_h: ui.available_height().max(400.0) - 80.0,
+                    preview_w: available_w.min(800.0),
+                    preview_h: (available_h - 80.0).max(200.0).min(1000.0),
                 };
 
                 let rasters = print_ui::preview_rasters(

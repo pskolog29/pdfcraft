@@ -554,6 +554,7 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 let view = &mut app.views[index];
                 // Intrinsic-width band pinned to the strip's horizontal centre so the group
                 // stays window-centred regardless of mode-tab widths (and does not overlay them).
+                // arif.14 correction6: At narrow widths, ensure center band has clearance from left/right
                 let zoom_txt = format!("{:.0}%", view.zoom * 100.0);
                 let page_txt = format!("{} / {}", view.current + 1, page_count.max(1));
                 // arif.13 final: mid-size zoom/nav — ~28px hit, ~18px glyph (between arif.11 and earlier arif.13).
@@ -563,7 +564,12 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         + f.layout_no_wrap(page_txt.clone(), theme::medium(12.0), t.text).size().x
                 });
                 let center_w = text_w + 5.0 * ZBOX + 10.0 + 6.0 * 3.0 + 10.0;
-                let center = Rect::from_center_size(full.center(), vec2(center_w, full.height()));
+                // Estimate left content width (mode tabs + menu + separators)
+                let left_est = 450.0;
+                let right_est = 250.0;
+                let center_left = (full.width() - center_w) / 2.0;
+                let final_left = center_left.max(left_est);
+                let center = Rect::from_min_size(egui::pos2(full.left() + final_left, full.top()), vec2(center_w, full.height()));
                 ui.scope_builder(
                     egui::UiBuilder::new().max_rect(center).layout(Layout::left_to_right(Align::Center)),
                     |ui| {
@@ -700,8 +706,8 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     if let Some(doc) = app.session.get(id) {
                         let can_undo = doc.can_undo().is_some();
                         let can_redo = doc.can_redo().is_some();
-                        let undo_text = tl!("Geri Al").to_string();
-                        let redo_text = tl!("Yinele").to_string();
+                        let undo_text = tl!("Undo").to_string();
+                        let redo_text = tl!("Redo").to_string();
                         let undo_tip = if let Some(label) = doc.undo_label() {
                             crate::i18n::fmt(tl!("Undo {}"), &[("edit", label.as_str())])
                         } else {
@@ -713,41 +719,28 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                             redo_text.clone()
                         };
 
-                        // Undo button with icon + text
-                        let undo_clicked = ui.add_enabled_ui(can_undo, |ui| {
-                            let font = theme::regular(12.0);
-                            let text_w = ui.fonts_mut(|f| f.layout_no_wrap(undo_text.clone(), font.clone(), t.text).size().x);
-                            let (rect, resp) = ui.allocate_exact_size(egui::vec2(20.0 + 4.0 + text_w + 8.0, 32.0), egui::Sense::click());
-                            let press = theme::Press::track(ui, &resp);
-                            press.wash(ui, rect, 4, false);
-                            let body = rect.translate(press.offset());
-                            icons::paint(ui, egui::Rect::from_min_size(egui::pos2(body.left() + 4.0, body.center().y - 10.0), egui::vec2(20.0, 20.0)), "undo-2", 16.0, if can_undo { t.icon } else { t.icon.gamma_multiply(0.4) });
-                            ui.painter().text(egui::pos2(body.left() + 28.0, body.center().y), egui::Align2::LEFT_CENTER, &undo_text, font, if can_undo { t.text } else { t.text.gamma_multiply(0.4) });
-                            resp
-                        }).inner.on_hover_text(&undo_tip).on_disabled_hover_text(tl!("Nothing to undo")).clicked();
+                        // Undo/Redo buttons using ghost_button for proper accessibility
+                        ui.add_enabled_ui(can_undo, |ui| {
+                            if widgets::ghost_button_sized(ui, "undo-2", &undo_text, 32.0)
+                                .on_hover_text(&undo_tip)
+                                .on_disabled_hover_text(tl!("Nothing to undo"))
+                                .clicked()
+                            {
+                                app.execute("edit.undo");
+                            }
+                        });
 
-                        if undo_clicked {
-                            app.execute("edit.undo");
-                        }
+                        ui.add_space(2.0);
 
-                        ui.add_space(4.0);
-
-                        // Redo button with icon + text
-                        let redo_clicked = ui.add_enabled_ui(can_redo, |ui| {
-                            let font = theme::regular(12.0);
-                            let text_w = ui.fonts_mut(|f| f.layout_no_wrap(redo_text.clone(), font.clone(), t.text).size().x);
-                            let (rect, resp) = ui.allocate_exact_size(egui::vec2(20.0 + 4.0 + text_w + 8.0, 32.0), egui::Sense::click());
-                            let press = theme::Press::track(ui, &resp);
-                            press.wash(ui, rect, 4, false);
-                            let body = rect.translate(press.offset());
-                            icons::paint(ui, egui::Rect::from_min_size(egui::pos2(body.left() + 4.0, body.center().y - 10.0), egui::vec2(20.0, 20.0)), "redo-2", 16.0, if can_redo { t.icon } else { t.icon.gamma_multiply(0.4) });
-                            ui.painter().text(egui::pos2(body.left() + 28.0, body.center().y), egui::Align2::LEFT_CENTER, &redo_text, font, if can_redo { t.text } else { t.text.gamma_multiply(0.4) });
-                            resp
-                        }).inner.on_hover_text(&redo_tip).on_disabled_hover_text(tl!("Nothing to redo")).clicked();
-
-                        if redo_clicked {
-                            app.execute("edit.redo");
-                        }
+                        ui.add_enabled_ui(can_redo, |ui| {
+                            if widgets::ghost_button_sized(ui, "redo-2", &redo_text, 32.0)
+                                .on_hover_text(&redo_tip)
+                                .on_disabled_hover_text(tl!("Nothing to redo"))
+                                .clicked()
+                            {
+                                app.execute("edit.redo");
+                            }
+                        });
 
                         ui.add_space(8.0);
                         // Visual separator
