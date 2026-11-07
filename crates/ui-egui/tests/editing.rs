@@ -4729,3 +4729,57 @@ fn valilik_form_expand_paragraph_text_edit_shot() {
     h.render().expect("render").save(out).expect("save shot");
     eprintln!("wrote {out}");
 }
+
+/// arif.14 correction5: Undo/Redo ribbon buttons for page rotation (block move analog)
+#[test]
+fn undo_redo_buttons_restore_page_rotation() {
+    let mut h = harness(3, |app| {
+        app.set_option("mode", "edit").unwrap();
+    });
+    h.run_steps(4);
+    
+    // Rotate page 2
+    let id = h.state().views[0].id;
+    h.state_mut().session.apply(id, pdfcraft_engine::Edit::RotatePages { pages: vec![1], degrees: 90 }).expect("rotate");
+    h.run_steps(3);
+    
+    let rotations = |h: &Harness<'static, PdfCraftApp>| {
+        h.state().session.get(h.state().views[0].id).unwrap().info.pages.iter().map(|p| p.rotation).collect::<Vec<_>>()
+    };
+    assert_eq!(rotations(&h), [0, 90, 0], "page 2 rotated");
+    
+    // Click Undo button (English label since test sets language=en)
+    h.get_by_label("Undo").click();
+    h.run_steps(3);
+    assert_eq!(rotations(&h), [0, 0, 0], "Undo button restored rotation");
+    
+    // Click Redo button
+    h.get_by_label("Redo").click();
+    h.run_steps(3);
+    assert_eq!(rotations(&h), [0, 90, 0], "Redo button reapplied rotation");
+}
+
+/// arif.14 correction5: Undo/Redo ribbon buttons for page deletion
+#[test]
+fn undo_redo_buttons_restore_deleted_page() {
+    let mut h = harness(3, |app| {
+        app.set_option("mode", "page").unwrap();
+    });
+    h.run_steps(4);
+    
+    // Delete middle page
+    let id = h.state().views[0].id;
+    h.state_mut().session.apply(id, pdfcraft_engine::Edit::DeletePages { pages: vec![1] }).expect("delete");
+    h.run_steps(3);
+    assert_eq!(page_texts(h.state()), ["Page 1", "Page 3"], "page 2 deleted");
+    
+    // Click Undo button
+    h.get_by_label("Undo").click();
+    h.run_steps(3);
+    assert_eq!(page_texts(h.state()), ["Page 1", "Page 2", "Page 3"], "Undo button restored page");
+    
+    // Click Redo button
+    h.get_by_label("Redo").click();
+    h.run_steps(3);
+    assert_eq!(page_texts(h.state()), ["Page 1", "Page 3"], "Redo button re-deleted page");
+}

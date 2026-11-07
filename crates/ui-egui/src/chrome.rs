@@ -682,7 +682,11 @@ pub fn ribbon_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         .show(ui, |ui| {
 
             // arif.13 final: icon LEFT + label RIGHT on one line; full labels, no scrollbar, tighten gaps to fit.
-            let avail = ui.available_width().max(1.0);
+            // arif.14: Account for undo/redo buttons in width calculation
+            let mut avail = ui.available_width().max(1.0);
+            let undo_redo_width = if app.active_ids().is_some() { 180.0 } else { 0.0 };
+            avail = (avail - undo_redo_width).max(100.0);
+            
             let tips: Vec<String> = tools.iter().map(|(_, label, _)| tl!(*label).to_string()).collect();
             let sep_after = 4usize; // visual group break after 4th tool when present
             let (font_size, icon_box, gap_it, pad_x, item_gap) = ribbon_fit(ui, &t, &tips, tools.len(), avail, sep_after);

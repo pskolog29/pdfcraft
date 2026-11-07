@@ -3222,9 +3222,12 @@ impl PdfCraftApp {
         let t = theme::Tokens::get(ui.ctx());
 
         // Settings in left panel, preview on the right (Word-like)
+        // arif.14 correction5: Responsive left panel width for narrow screens
+        let total_w = ui.available_width();
+        let left_w = if total_w < 900.0 { 300.0 } else { 380.0 };
         egui::Panel::left("print_settings")
             .resizable(false)
-            .default_size(380.0)
+            .default_size(left_w)
             .frame(egui::Frame::NONE.fill(t.panel).inner_margin(egui::Margin::symmetric(16, 12)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
