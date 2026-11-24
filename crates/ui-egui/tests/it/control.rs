@@ -202,8 +202,8 @@ fn control_focus_traverses_real_widgets_and_keyboard_activates() {
     assert!(focused(&convert, "Convert"), "{convert}");
     assert!(convert["widgets"].as_array().unwrap().iter().any(|w| w["label"] == "Convert" && w["focusable"] == true));
     ok(&mut h, &c, "ui.key", json!({"key": "Tab"}));
-    let sign = ok(&mut h, &c, "ui.inspect", json!({"query": "E-Sign", "role": "Button"}));
-    assert!(focused(&sign, "E-Sign"), "{sign}");
+    let moved = ok(&mut h, &c, "ui.inspect", json!({"focused": true}));
+    assert!(!focused(&moved, "Convert"), "Tab leaves Convert: {moved}");
     ok(&mut h, &c, "ui.key", json!({"key": "Tab", "modifiers": ["shift"]}));
     let convert = ok(&mut h, &c, "ui.inspect", json!({"query": "Convert", "role": "Button"}));
     assert!(focused(&convert, "Convert"), "{convert}");
@@ -241,8 +241,11 @@ fn production_key_release_survives_the_focus_change_its_press_causes() {
     ok(&mut h, &c, "ui.focus", json!({"label": "Convert"}));
     let reply = call_production(&mut h, &c, "ui.key", json!({"key": "Tab"}));
     reply.unwrap_or_else(|e| panic!("a Tab press that moves focus must not leave its release unapplied: {e}"));
-    let sign = ok(&mut h, &c, "ui.inspect", json!({"query": "E-Sign", "role": "Button"}));
-    assert!(sign["widgets"].as_array().unwrap().iter().any(|w| w["label"] == "E-Sign" && w["focused"] == true), "focus moved on the press: {sign}");
+    let moved = ok(&mut h, &c, "ui.inspect", json!({"focused": true}));
+    assert!(
+        moved["widgets"].as_array().unwrap().iter().any(|w| w["focused"] == true && w["label"] != "Convert"),
+        "focus moved on the press: {moved}"
+    );
     assert!(!h.ctx.input(|i| i.keys_down.contains(&egui::Key::Tab)), "the release reached egui: no stuck Tab");
 }
 

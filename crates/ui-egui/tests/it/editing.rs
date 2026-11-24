@@ -8642,13 +8642,13 @@ fn mode_tab(h: &Harness<'static, PdfCraftApp>, label: &str) -> egui::Rect {
 }
 
 /// The cursor over each mode bar tab that page 1's text lies under, once that text is scrolled
-/// up under the bar. With the All tools panel closed it lies under Edit, Convert and E-Sign; it
+/// up under the bar. With the All tools panel closed it lies under Edit and Convert; it
 /// starts right of All tools.
-fn mode_tab_cursors(h: &mut Harness<'static, PdfCraftApp>, text: egui::Rect) -> [(&'static str, egui::CursorIcon); 3] {
+fn mode_tab_cursors(h: &mut Harness<'static, PdfCraftApp>, text: egui::Rect) -> [(&'static str, egui::CursorIcon); 2] {
     h.state_mut().views[0].goto = Some((0, 0.5));
     h.run_steps(4);
     let offset = h.state().views[0].page_screen_rect(0).expect("on screen").top();
-    ["Edit", "Convert", "E-Sign"].map(|label| {
+    ["Edit", "Convert"].map(|label| {
         let at = mode_tab(h, label).center();
         assert!(text.translate(egui::vec2(0.0, offset)).contains(at), "the text lies under {label}");
         h.hover_at(at);
@@ -8657,8 +8657,7 @@ fn mode_tab_cursors(h: &mut Harness<'static, PdfCraftApp>, text: egui::Rect) -> 
     })
 }
 
-const HAND_ON_EVERY_TAB: [(&str, egui::CursorIcon); 3] =
-    [("Edit", egui::CursorIcon::PointingHand), ("Convert", egui::CursorIcon::PointingHand), ("E-Sign", egui::CursorIcon::PointingHand)];
+const HAND_ON_EVERY_TAB: [(&str, egui::CursorIcon); 2] = [("Edit", egui::CursorIcon::PointingHand), ("Convert", egui::CursorIcon::PointingHand)];
 
 /// Page 1's text block on screen, relative to the page's top edge, in the window as it is now.
 fn page_text(h: &Harness<'static, PdfCraftApp>) -> egui::Rect {

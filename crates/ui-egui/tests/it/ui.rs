@@ -412,15 +412,16 @@ fn read_mode_rail_buttons_open_their_panels() {
     h.get_by_label("Alpha section");
 }
 
-/// The mode bar matches Acrobat's: All tools, Edit, Convert and E-Sign, with no Read tab. Read
-/// mode is still a View command.
+/// The mode bar is All tools, Edit and Convert, with no Read tab and no E-Sign tab. Read mode is
+/// still a View command.
 #[test]
 fn the_mode_bar_has_no_read_tab() {
     use pdfcraft_ui_egui::Mode;
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
-    for label in ["All tools", "Edit", "Convert", "E-Sign"] {
-        assert!(h.query_all_by_label(label).next().is_some(), "the {label} tab is there");
+    for label in ["All tools", "Edit", "Convert"] {
+        assert!(h.query_all_by_role_and_label(egui::accesskit::Role::Button, label).next().is_some(), "the {label} tab is there");
     }
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "E-Sign").is_none(), "no E-Sign tab");
     assert!(h.query_all_by_label("Read").next().is_none(), "no Read tab");
     h.state_mut().run_command("view.read_mode");
     h.run_steps(2);
@@ -1729,7 +1730,7 @@ fn the_edit_tab_turns_on_edit_text_and_images() {
     support::outside_menus(&h, "Edit").click();
     h.run_steps(3);
     h.state_mut().quick_tool = QuickTool::Hand;
-    h.get_by_label("Convert").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Convert").click();
     h.run_steps(3);
     assert_eq!(h.state().quick_tool, QuickTool::Hand);
 }

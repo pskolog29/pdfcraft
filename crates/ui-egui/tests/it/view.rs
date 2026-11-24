@@ -2244,7 +2244,7 @@ fn switching_modes_keeps_the_current_page_at_fixed_zoom() {
 }
 
 #[test]
-fn the_top_menus_open_a_horizontal_strip() {
+fn the_tool_menus_open_a_horizontal_strip() {
     use egui_kittest::kittest::Queryable;
     let mut h = harness(&[]);
     let menu_item = |label: &'static str| {
@@ -2252,19 +2252,27 @@ fn the_top_menus_open_a_horizontal_strip() {
     };
     assert!(h.query_all_by(menu_item("File")).count() >= 1, "the titles stay in the top bar");
     assert_eq!(h.query_all_by(menu_item("Sign")).count(), 0, "Sign is not a top menu");
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "E-Sign").is_none(), "E-Sign is not a top tab");
     assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "tools stay hidden until the menu opens");
     crate::support::open_menu(&mut h, "File");
     let open = crate::support::menu_row(&h, "Open…").rect();
     let save = crate::support::menu_row(&h, "Save").rect();
     let file = h.get_by(menu_item("File")).rect();
-    assert!(save.left() > open.right() - 1.0, "Save sits to the right of Open: {open:?} {save:?}");
-    assert!((save.top() - open.top()).abs() < 8.0, "the tools share one horizontal strip");
-    assert!(open.top() + 1.0 >= file.bottom(), "the strip opens under the titles: {file:?} {open:?}");
+    assert!(save.top() > open.bottom() - 1.0, "File lists downward: {open:?} {save:?}");
+    assert!((save.left() - open.left()).abs() < 8.0, "File is a vertical menu");
+    assert!(open.top() + 1.0 >= file.bottom(), "the menu opens under its title: {file:?} {open:?}");
     crate::support::open_menu(&mut h, "Edit");
-    crate::support::menu_row(&h, "Preferences…");
+    let undo = crate::support::menu_row(&h, "Undo").rect();
+    let redo = crate::support::menu_row(&h, "Redo").rect();
+    let edit = h.get_by(menu_item("Edit")).rect();
+    assert!(redo.left() > undo.right() - 1.0, "Edit tools sit in a row: {undo:?} {redo:?}");
+    assert!((redo.top() - undo.top()).abs() < 8.0, "Edit is a horizontal strip");
+    assert!(undo.top() + 1.0 >= edit.bottom(), "the strip opens under the titles");
     assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "opening Edit closes File");
     crate::support::open_menu(&mut h, "Pages");
     crate::support::menu_row(&h, "Delete pages");
+    crate::support::open_menu(&mut h, "Convert");
+    crate::support::menu_row(&h, "Export to Word…");
 }
 
 #[test]
