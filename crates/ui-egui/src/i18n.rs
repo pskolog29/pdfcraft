@@ -646,6 +646,10 @@ pub fn fmt(template: &str, args: &[(&str, &str)]) -> String {
 /// A generated history label (the action part of "Undo …") in the current language. Captured
 /// values (file and field names) are inserted as they are; unknown labels are looked up whole.
 pub fn action_label(text: &str) -> String {
+    // An exact phrase wins over the prefix guess, so "Import bookmarks" is not read as a file name.
+    if product_turkish() && tr_overlay::phrase(text).is_some() {
+        return t(text).to_owned();
+    }
     for (prefix, template) in [
         ("Insert pages from ", "Insert pages from {name}"),
         ("Fill in ", "Fill in {name}"),
@@ -690,7 +694,9 @@ pub fn command_label(text: &str) -> String {
     for (prefix, template) in [("Undo", "Undo {action}"), ("Redo", "Redo {action}")] {
         if let Some(action) = text.strip_prefix(prefix).and_then(|tail| tail.strip_prefix(' ')) {
             let action = action_label(action);
-            if has(current(), "Undo {action}") && has(current(), "Redo {action}") {
+            let paired = (has(current(), "Undo {action}") && has(current(), "Redo {action}"))
+                || (product_turkish() && tr_overlay::phrase("Undo {action}").is_some() && tr_overlay::phrase("Redo {action}").is_some());
+            if paired {
                 return fmt(t(template), &[("action", &action)]);
             }
             return format!("{} {action}", t(prefix));
@@ -714,6 +720,12 @@ pub fn menu_label(id: &str, label: &str) -> String {
 /// The form is the language's CLDR category; `{n}` is written in `0`–`9` without grouping or
 /// isolate marks, as PdfCraft always has.
 pub fn trn(lang: Lang, n: u64, one: &str, other: &str) -> String {
+    if product_turkish() {
+        let template = if n == 1 { one } else { other };
+        if let Some(phrase) = tr_overlay::phrase(template) {
+            return fmt(phrase, &[("n", &n.to_string())]);
+        }
+    }
     lang.i18n().trn_plain(lang.lang, n, one, other)
 }
 
