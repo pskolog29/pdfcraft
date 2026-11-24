@@ -69,7 +69,8 @@ pub(super) fn clear_of_scrollbar(ui: &mut egui::Ui) {
 /// accordion. Sections start open so every tool stays reachable.
 fn all_tools(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     // Labels distinct from the Combine grid's Expand and Collapse, which can show beside them.
-    let (expand, close) = panel_header(ui, t, "All tools", Some(("maximize-2", tl!("Expand all tools"))));
+    // The catalog list has no "All tools" title. Expand and Close stay.
+    let (expand, close) = panel_header(ui, t, "", Some(("maximize-2", tl!("Expand all tools"))));
     if expand {
         app.expand_all_tools();
     }
@@ -349,7 +350,7 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
 
 /// A small original page for an export format. The letters name the file type; the
 /// shape is ours, not a vendor logo.
-fn export_badge(ui: &egui::Ui, rect: Rect, command: &str) -> bool {
+pub(crate) fn export_badge(ui: &egui::Ui, rect: Rect, command: &str) -> bool {
     let Some((letters, color, stack)) = export_mark(command) else { return false };
     let painter = ui.painter();
     if stack {
@@ -361,7 +362,14 @@ fn export_badge(ui: &egui::Ui, rect: Rect, command: &str) -> bool {
         let fold = Rect::from_min_size(rect.right_top() - vec2(6.0, 0.0), vec2(6.0, 6.0));
         painter.rect_filled(fold, CornerRadius::same(1), Color32::from_white_alpha(210));
     }
-    painter.text(rect.center() + vec2(if stack { 0.0 } else { -1.0 }, 1.0), Align2::CENTER_CENTER, letters, theme::semibold(6.5), Color32::WHITE);
+    let font_size = (rect.height() * 0.34).clamp(6.5, 11.0);
+    painter.text(
+        rect.center() + vec2(if stack { 0.0 } else { -1.0 }, 1.0),
+        Align2::CENTER_CENTER,
+        letters,
+        theme::semibold(font_size),
+        Color32::WHITE,
+    );
     true
 }
 

@@ -25,7 +25,7 @@ pub use bookmarks::BmAction;
 pub(crate) use bookmarks::ellipsized_prefix;
 pub use right::right_panel;
 pub use tools::left_panel;
-pub(crate) use tools::panel_header;
+pub(crate) use tools::{export_badge, panel_header};
 
 /// Form filling and the accessibility checker stay out of the tool lists. Their commands still run
 /// when something else asks for them, so a document that already has fields can still be edited.

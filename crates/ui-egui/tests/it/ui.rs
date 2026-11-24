@@ -412,15 +412,16 @@ fn read_mode_rail_buttons_open_their_panels() {
     h.get_by_label("Alpha section");
 }
 
-/// The mode bar is All tools, Edit and Convert, with no Read tab and no E-Sign tab. Read mode is
-/// still a View command.
+/// The mode bar is Edit and Convert. All tools, Read and E-Sign are not tabs. Read mode is still
+/// a View command.
 #[test]
 fn the_mode_bar_has_no_read_tab() {
     use pdfcraft_ui_egui::Mode;
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
-    for label in ["All tools", "Edit", "Convert"] {
+    for label in ["Edit", "Convert"] {
         assert!(h.query_all_by_role_and_label(egui::accesskit::Role::Button, label).next().is_some(), "the {label} tab is there");
     }
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "All tools").is_none(), "no All tools tab");
     assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "E-Sign").is_none(), "no E-Sign tab");
     assert!(h.query_all_by_label("Read").next().is_none(), "no Read tab");
     h.state_mut().run_command("view.read_mode");
@@ -477,8 +478,9 @@ fn read_mode_closes_the_panes_and_leaving_it_brings_them_back() {
     h.run_steps(2);
     h.get_by_label("Page thumbnails").click();
     h.run_steps(2);
-    h.get_by_label("All tools").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Edit").click();
     h.run_steps(3);
+    assert_eq!(h.state().mode, Mode::Edit);
     assert_eq!(h.state().right, Some(RightPanel::Pages));
 }
 
@@ -533,10 +535,10 @@ fn a_pane_closed_in_read_mode_stays_closed_when_leaving_it() {
     h.run_steps(3);
     assert_eq!(h.state().right, None);
     assert!(h.state().comments_panel_closed);
-    // Leave Read mode through the toolbar.
-    h.get_by_label("All tools").click();
+    // Leave Read mode through a mode tab.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Edit").click();
     h.run_steps(3);
-    assert_eq!(h.state().mode, Mode::AllTools);
+    assert_eq!(h.state().mode, Mode::Edit);
     assert_eq!(h.state().right, None, "the pane closed in Read mode stays closed");
     assert!(h.state().comments_panel_closed);
     // The same through the Read mode command.
@@ -1722,9 +1724,9 @@ fn the_edit_tab_turns_on_edit_text_and_images() {
     h.run_steps(3);
     assert_eq!(h.state().mode, Mode::Edit);
     assert_eq!(h.state().quick_tool, QuickTool::EditText);
-    h.get_by_label("All tools").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Convert").click();
     h.run_steps(3);
-    assert_eq!(h.state().mode, Mode::AllTools);
+    assert_eq!(h.state().mode, Mode::Convert);
     assert_eq!(h.state().quick_tool, QuickTool::Select);
     // Another tool picked inside Edit is not taken away by leaving it.
     support::outside_menus(&h, "Edit").click();

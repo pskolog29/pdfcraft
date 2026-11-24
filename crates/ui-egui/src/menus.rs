@@ -865,7 +865,7 @@ fn ribbon_row(ui: &mut egui::Ui, nodes: &[Node], gate: &Gate, chosen: &mut Vec<C
             match node {
                 Node::Separator => ui.add_space(8.0),
                 Node::Standard { label, .. } => {
-                    let _ = ribbon_button(ui, label, "square", false, None, false);
+                    let _ = ribbon_button(ui, label, None, "square", false, None, false);
                 }
                 Node::Item(item) => {
                     let enabled = item.enabled && gate.allows(item);
@@ -875,7 +875,7 @@ fn ribbon_row(ui: &mut egui::Ui, nodes: &[Node], gate: &Gate, chosen: &mut Vec<C
                         ItemKind::Radio(on) => (egui::accesskit::Role::MenuItemRadio, Some(on)),
                     };
                     let shortcut = item.shortcut.as_ref().map(|c| c.display(platform));
-                    let resp = ribbon_button(ui, &item.label, command_icon(&item.command), enabled, on, false);
+                    let resp = ribbon_button(ui, &item.label, Some(item.command.id.as_str()), command_icon(&item.command), enabled, on, false);
                     menu_access(&resp, role, &item.label, on, shortcut.as_deref());
                     if enabled && resp.hovered() {
                         hover.item = true;
@@ -886,7 +886,7 @@ fn ribbon_row(ui: &mut egui::Ui, nodes: &[Node], gate: &Gate, chosen: &mut Vec<C
                 }
                 Node::Submenu { label, children, .. } => {
                     let enabled = submenu_enabled(children, gate, depth.saturating_add(1));
-                    let resp = ribbon_button(ui, label, submenu_icon(label), enabled, None, open == label);
+                    let resp = ribbon_button(ui, label, None, submenu_icon(label), enabled, None, open == label);
                     menu_access(&resp, egui::accesskit::Role::MenuItem, label, None, None);
                     resp.ctx.accesskit_node_builder(resp.id, |n| {
                         n.set_has_popup(egui::accesskit::HasPopup::Menu);
@@ -910,7 +910,7 @@ fn submenu_children<'a>(nodes: &'a [Node], label: &str) -> Option<&'a [Node]> {
 }
 
 /// One tool: icon above a short label. The accessible name is the full label.
-fn ribbon_button(ui: &mut egui::Ui, label: &str, icon: &str, enabled: bool, on: Option<bool>, open: bool) -> egui::Response {
+fn ribbon_button(ui: &mut egui::Ui, label: &str, command: Option<&str>, icon: &str, enabled: bool, on: Option<bool>, open: bool) -> egui::Response {
     let t = crate::theme::Tokens::get(ui.ctx());
     let font = crate::theme::medium(11.0);
     let text_w = crate::widgets::text_width(ui, label, &font).min(132.0);
@@ -929,7 +929,11 @@ fn ribbon_button(ui: &mut egui::Ui, label: &str, icon: &str, enabled: bool, on: 
             }
             let fg = if enabled { t.text } else { t.text_faint };
             let body = rect.translate(press.offset());
-            crate::icons::paint(ui, egui::Rect::from_center_size(body.center() - egui::vec2(0.0, 10.0), egui::vec2(18.0, 18.0)), icon, 18.0, fg);
+            let badge = egui::Rect::from_center_size(body.center() - egui::vec2(0.0, 12.0), egui::vec2(28.0, 30.0));
+            let marked = command.is_some_and(|id| crate::panels::export_badge(ui, badge, id));
+            if !marked {
+                crate::icons::paint(ui, egui::Rect::from_center_size(body.center() - egui::vec2(0.0, 10.0), egui::vec2(18.0, 18.0)), icon, 18.0, fg);
+            }
             ui.painter().text(body.center() + egui::vec2(0.0, 14.0), egui::Align2::CENTER_CENTER, shown, font, fg);
             resp
         })
