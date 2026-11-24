@@ -58,6 +58,10 @@ impl PdfCraftApp {
 
     /// Help ▸ Check for updates: ask for the latest release and show the outcome.
     pub fn check_for_updates(&mut self) {
+        if crate::i18n::product_offline() {
+            self.notify_tr("This copy does not check for updates.");
+            return;
+        }
         #[cfg(not(target_arch = "wasm32"))]
         {
             self.updates.open = true;
@@ -75,7 +79,7 @@ impl PdfCraftApp {
         {
             let Some(ctx) = self.ctx.clone() else { return };
             // Settled on the first frame: a preference turned on later waits for the next start.
-            let at_start = std::mem::take(&mut self.updates.startup_check) && self.update_check_at_start;
+            let at_start = std::mem::take(&mut self.updates.startup_check) && self.update_check_at_start && !crate::i18n::product_offline();
             let updates = &mut self.updates;
             if std::mem::take(&mut updates.check_requested) {
                 updates.updater.check_now(&ctx);

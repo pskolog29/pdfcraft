@@ -39,7 +39,7 @@ fn help_prints_usage_and_exits() {
 fn version_prints_the_version_and_exits() {
     let out = run(&["--version"], Stdio::piped());
     assert!(out.status.success(), "{:?} {}", out.status, String::from_utf8_lossy(&out.stderr));
-    assert!(String::from_utf8_lossy(&out.stdout).starts_with("pdfcraft "), "{}", String::from_utf8_lossy(&out.stdout));
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with("Arif Pdf "), "{}", String::from_utf8_lossy(&out.stdout));
 }
 
 /// A standard output that can't be written (here a full device) ends the run normally: `println!`

@@ -89,16 +89,16 @@ pub(crate) fn body(
     labels: &[String],
     thumb: &mut dyn FnMut(usize) -> Option<egui::TextureId>,
 ) -> (bool, bool) {
-    ui.set_width(820.0);
-    ui.label(egui::RichText::new(tl!("Print")).font(theme::semibold(18.0)));
-    ui.add_space(8.0);
+    ui.set_width(680.0);
+    ui.label(egui::RichText::new(tl!("Print")).font(theme::semibold(16.0)));
+    ui.add_space(4.0);
     let settings = d.settings(sizes.len(), labels);
     let sheets = settings.as_ref().ok().and_then(|s| print::layout(sizes, s).ok()).unwrap_or_default();
     d.sheet = d.sheet.min(sheets.len().saturating_sub(1));
     ui.horizontal_top(|ui| {
         // Settings.
         ui.vertical(|ui| {
-            ui.set_width(470.0);
+            ui.set_width(420.0);
             egui::Grid::new("print-top").num_columns(2).spacing([10.0, 8.0]).show(ui, |ui| {
                 let printer_caption = ui.label(tl!("Printer:"));
                 let before = d.printer.clone();
@@ -110,7 +110,7 @@ pub(crate) fn body(
                         None if still_looking(d) => tl!("Looking for printers…").to_string(),
                         None => tl!("Save as PDF").to_string(),
                     };
-                    craft_ui::ComboBox::from_id_salt("printer").selected_text(shown).width(260.0).show_ui(ui, |ui| {
+                    craft_ui::ComboBox::from_id_salt("printer").selected_text(shown).width(210.0).show_ui(ui, |ui| {
                         if d.printers_loading {
                             ui.add_enabled(false, egui::Label::new(tl!("Looking for printers…")));
                         }
@@ -204,7 +204,7 @@ pub(crate) fn body(
                 let paper_label = ui.label(tl!("Paper:"));
                 let paper_name = PAPERS.get(d.paper).map_or("US Letter", |p| p.0);
                 let before = d.paper;
-                craft_ui::ComboBox::from_id_salt("paper").selected_text(tl!(paper_name)).width(260.0).show_ui(ui, |ui| {
+                craft_ui::ComboBox::from_id_salt("paper").selected_text(tl!(paper_name)).width(210.0).show_ui(ui, |ui| {
                     for (i, (name, _)) in PAPERS.iter().enumerate() {
                         ui.selectable_value(&mut d.paper, i, tl!(name));
                     }
@@ -437,7 +437,8 @@ pub(crate) fn body(
         ui.vertical(|ui| {
             ui.set_width(PREVIEW_W);
             let (area, _) = ui.allocate_exact_size(vec2(PREVIEW_W, PREVIEW_H), egui::Sense::hover());
-            ui.painter().rect_filled(area, 6.0, t.hover);
+            ui.painter().rect_filled(area, 10.0, t.card);
+            ui.painter().rect_stroke(area, 10.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
             match (&settings, sheets.get(d.sheet)) {
                 (Err(e), _) => {
                     ui.put(area.shrink(16.0), egui::Label::new(egui::RichText::new(tl!(e)).color(t.text_muted)).wrap());

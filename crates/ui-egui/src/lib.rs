@@ -693,6 +693,8 @@ pub struct PdfCraftApp {
     pub replace_draft: Option<files::ReplaceDraft>,
     /// The last web link the app asked the system to open (tests and automation).
     pub last_opened_url: Option<String>,
+    /// The last document web or email address this copy refused to open.
+    pub last_blocked_url: Option<String>,
     /// The home screen's community card was closed; it comes back next launch (not remembered).
     pub community_card_closed: bool,
     /// A document asked to open this address; the user hasn't answered yet (#90, #91).

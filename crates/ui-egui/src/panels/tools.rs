@@ -1,13 +1,11 @@
 use super::edit::{actions_menu, edit_panel, stamp_palette};
 use super::{
-    Align2, Availability, Color32, CornerRadius, LeftPanel, PdfCraftApp, Rect, Sense, Stroke, TOOL_GROUPS, Tokens, ToolGroup, catalog, icons, theme,
-    vec2, widgets,
+    Align2, Availability, Color32, CornerRadius, LeftPanel, PdfCraftApp, Rect, Sense, Stroke, Tokens, ToolGroup, catalog, icons, theme, vec2, widgets,
 };
 
-const COLLAPSED_TOOLS: usize = 14;
-
-fn hue(g: &ToolGroup) -> Color32 {
-    Color32::from_rgb(g.hue[0], g.hue[1], g.hue[2])
+/// One slate for every tool icon, so the list reads as one corporate palette.
+fn icon_color(t: &Tokens) -> Color32 {
+    if t.kind == theme::ThemeKind::Dark { Color32::from_rgb(148, 163, 184) } else { Color32::from_rgb(51, 65, 85) }
 }
 
 pub fn left_panel(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
@@ -67,8 +65,8 @@ pub(super) fn clear_of_scrollbar(ui: &mut egui::Ui) {
     ui.set_max_width((ui.available_width() - SCROLLBAR_GUTTER).max(0.0));
 }
 
-/// The All tools sidebar: Expand (the full view) and Close, then the tool list, the first few
-/// tools until View more shows them all.
+/// The All tools sidebar: Expand (the full view) and Close, then each catalog category as an
+/// accordion. Sections start open so every tool stays reachable.
 fn all_tools(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     // Labels distinct from the Combine grid's Expand and Collapse, which can show beside them.
     let (expand, close) = panel_header(ui, t, "All tools", Some(("maximize-2", tl!("Expand all tools"))));
@@ -81,29 +79,42 @@ fn all_tools(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
         clear_of_scrollbar(ui);
         ui.add_space(2.0);
-        let shown = if app.all_tools_expanded { TOOL_GROUPS.len() } else { COLLAPSED_TOOLS.min(TOOL_GROUPS.len()) };
-        for g in &TOOL_GROUPS[..shown] {
-            let (resp, pin_clicked) = tool_row(ui, t, g, app.is_tool_pinned(g.id));
-            if pin_clicked {
-                app.toggle_pin_tool(g.id);
-            } else if resp.clicked() {
-                app.select_tool(g.id);
-            }
-        }
-        ui.add_space(4.0);
-        let more = if app.all_tools_expanded { "View less" } else { "View more" };
-        if ui
-            .add(
-                egui::Label::new(egui::RichText::new(tl!(more)).color(t.accent_text).font(theme::medium(13.0)))
-                    .selectable(false)
-                    .sense(Sense::click()),
-            )
-            .on_hover_cursor(egui::CursorIcon::PointingHand)
-            .clicked()
-        {
-            app.all_tools_expanded = !app.all_tools_expanded;
+        for cat in catalog::TOOL_CATEGORIES {
+            section(app, ui, t, cat);
         }
     });
+}
+
+/// One category heading. A click folds or unfolds its tools. The heading's accessible name is the
+/// category label, without the chevron.
+fn section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, cat: &catalog::ToolCategory) {
+    let id = ui.scope_id().with(("tool_section", cat.label));
+    let mut open = ui.data_mut(|d| d.get_temp::<bool>(id)).unwrap_or(true);
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 28.0), Sense::click());
+    let label = tl!(cat.label);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 6.0, t.hover);
+    }
+    let mark = if open { "chevron-down" } else { "chevron-right" };
+    icons::paint(ui, Rect::from_center_size(rect.left_center() + vec2(10.0, 0.0), vec2(14.0, 14.0)), mark, 14.0, t.text_muted);
+    ui.painter().text(rect.left_center() + vec2(22.0, 0.0), egui::Align2::LEFT_CENTER, label, theme::semibold(12.0), t.text);
+    if resp.clicked() {
+        open = !open;
+        ui.data_mut(|d| d.insert_temp(id, open));
+    }
+    if !open {
+        return;
+    }
+    for gid in cat.groups {
+        let Some(g) = catalog::group(gid) else { continue };
+        let (row, pin_clicked) = tool_row(ui, t, g, app.is_tool_pinned(g.id));
+        if pin_clicked {
+            app.toggle_pin_tool(g.id);
+        } else if row.clicked() {
+            app.select_tool(g.id);
+        }
+    }
 }
 
 /// Draw a one-line row label without painting into the status chip or beyond the sidebar.
@@ -124,7 +135,7 @@ fn tool_row(ui: &mut egui::Ui, t: &Tokens, g: &ToolGroup, is_pinned: bool) -> (e
     let press = theme::Press::track(ui, &resp);
     press.wash(ui, rect, 6, false);
     let body = rect.translate(press.offset());
-    icons::paint(ui, Rect::from_min_size(body.min + vec2(6.0, 7.0), vec2(20.0, 20.0)), g.icon, 19.0, hue(g));
+    icons::paint(ui, Rect::from_min_size(body.min + vec2(6.0, 7.0), vec2(20.0, 20.0)), g.icon, 19.0, icon_color(t));
 
     let pin_rect = Rect::from_center_size(body.right_center() - vec2(14.0, 0.0), vec2(22.0, 22.0));
     let pin_resp = ui.interact(pin_rect, ui.scope_id().with(("pin_toggle_row", g.id)), Sense::click());
@@ -267,7 +278,7 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
                     Rect::from_min_size(body.min + vec2(6.0, 8.0), vec2(18.0, 18.0)),
                     item.icon,
                     17.0,
-                    if ready { hue(g) } else { t.text_faint },
+                    if ready { icon_color(t) } else { t.text_faint },
                 );
                 let (chip, fill, cfg) = match item.availability {
                     Availability::Ready => (tl!("Ready"), Color32::from_rgb(0xDD, 0xF3, 0xE4), Color32::from_rgb(0x1E, 0x7B, 0x43)),
