@@ -519,27 +519,22 @@ impl PdfCraftApp {
     }
 
     /// The menu bar drawn in the window (Windows, Linux, the web, and macOS when the native one
-    /// couldn't be installed), where the top bar starts. Edit, Pages and Convert open a horizontal
-    /// icon strip under the titles. The other titles open a vertical menu under themselves. The
-    /// native macOS bar stays a normal menu bar. Runs the commands chosen.
+    /// couldn't be installed), where the top bar starts. Edit, Pages and Convert open a compact
+    /// strip in the layout under the titles, so the page starts below it. The other titles open a
+    /// vertical menu under themselves. The native macOS bar stays a normal menu bar. Runs the
+    /// commands chosen from a vertical menu; the strip runs its own.
     pub(crate) fn menu_bar_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         let bar = craft_menu::layout(&self.menu_bar(&ctx), Target::current(), &layout_options()).bar;
         let gate = self.menu_gate(&ctx);
-        let section_id = ui.make_persistent_id("pdfcraft-menu-section");
         let popup_id = ui.make_persistent_id("pdfcraft-menu-ribbon");
-        let sub_id = ui.make_persistent_id("pdfcraft-menu-ribbon-sub");
-        let mut open_title: String = ctx.data(|d| d.get_temp(section_id)).unwrap_or_default();
-        let mut popup_open = egui::Popup::is_id_open(&ctx, popup_id);
-        if !popup_open {
-            open_title.clear();
-            ctx.data_mut(|d| d.insert_temp(sub_id, String::new()));
-        }
+        let sub_id = menu_ribbon_sub_id();
+        let mut open_title: String = ctx.data(|d| d.get_temp(menu_section_id())).unwrap_or_default();
         let mut pick: Option<String> = None;
         let mut bar_bottom = ui.max_rect().bottom();
         let mut title_left = ui.max_rect().left();
         for menu in &bar.menus {
-            let open = popup_open && open_title == menu.title;
+            let open = open_title == menu.title;
             let resp = menu_tab(ui, menu, open);
             bar_bottom = bar_bottom.max(resp.rect.bottom());
             if open {
@@ -550,59 +545,121 @@ impl PdfCraftApp {
                 title_left = resp.rect.left();
             }
         }
+        ctx.data_mut(|d| d.insert_temp(menu_title_click_id(), pick.is_some()));
         // Open or close before the popup is drawn. A popup that is only remembered, and not shown
         // in the same frame, is dropped at the end of the frame.
         if let Some(title) = pick.clone() {
-            if popup_open && open_title == title {
+            if open_title == title {
                 egui::Popup::close_id(&ctx, popup_id);
-                popup_open = false;
                 open_title.clear();
             } else {
-                egui::Popup::open_id(&ctx, popup_id);
-                popup_open = true;
                 open_title = title;
             }
             ctx.data_mut(|d| d.insert_temp(sub_id, String::new()));
         }
+        let menu = bar.menus.iter().find(|m| m.title == open_title);
+        let strip = menu.is_some_and(opens_tool_strip);
         let mut chosen = Vec::new();
-        if popup_open && let Some(menu) = bar.menus.iter().find(|m| m.title == open_title) {
-            let strip = opens_tool_strip(menu);
-            let anchor = if strip { egui::pos2(ctx.content_rect().left(), bar_bottom) } else { egui::pos2(title_left, bar_bottom) };
-            let width = ctx.content_rect().width();
-            let t = crate::theme::Tokens::get(&ctx);
-            // Clicks on the titles are outside the popup. They are handled above, so it does not
-            // close itself on them. Escape still closes it.
-            let mut popup = egui::Popup::new(popup_id, ctx.clone(), anchor, egui::LayerId::new(egui::Order::Foreground, popup_id))
-                .at_position(anchor)
-                .align(egui::RectAlign::BOTTOM_START)
-                .align_alternatives(&[])
-                .open_memory(None::<egui::SetOpenCommand>)
-                .close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
-                .gap(0.0)
-                .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 6)).stroke(egui::Stroke::new(1.0, t.divider)));
+        if let Some(menu) = menu {
             if strip {
-                popup = popup.width(width);
-            }
-            let shown = popup.show(|ui| {
-                if strip {
-                    ui.set_width(width.max(1.0) - 16.0);
-                    paint_ribbon(ui, &menu.children, &gate, &mut chosen, sub_id, 0);
-                } else {
-                    paint_dropdown(ui, &menu.children, &gate, &mut chosen, sub_id, 0);
-                }
-            });
-            if shown.as_ref().is_some_and(|inner| inner.response.clicked_elsewhere()) && pick.is_none() {
                 egui::Popup::close_id(&ctx, popup_id);
-                open_title.clear();
+            } else {
+                // show() draws a memory popup only when it is already open this frame.
+                egui::Popup::open_id(&ctx, popup_id);
+                let anchor = egui::pos2(title_left, bar_bottom);
+                let t = crate::theme::Tokens::get(&ctx);
+                // Clicks on the titles are outside the popup. They are handled above, so it does not
+                // close itself on them. Escape still closes it.
+                let shown = egui::Popup::new(popup_id, ctx.clone(), anchor, egui::LayerId::new(egui::Order::Foreground, popup_id))
+                    .at_position(anchor)
+                    .align(egui::RectAlign::BOTTOM_START)
+                    .align_alternatives(&[])
+                    .open_memory(None::<egui::SetOpenCommand>)
+                    .close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
+                    .gap(0.0)
+                    .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.divider)))
+                    .show(|ui| {
+                        paint_dropdown(ui, &menu.children, &gate, &mut chosen, sub_id, 0);
+                    });
+                if shown.as_ref().is_some_and(|inner| inner.response.clicked_elsewhere()) && pick.is_none() {
+                    egui::Popup::close_id(&ctx, popup_id);
+                    open_title.clear();
+                }
             }
+        } else {
+            egui::Popup::close_id(&ctx, popup_id);
+            open_title.clear();
         }
         if !chosen.is_empty() {
             egui::Popup::close_id(&ctx, popup_id);
             open_title.clear();
         }
-        ctx.data_mut(|d| d.insert_temp(section_id, open_title));
+        let strip_open = strip && !open_title.is_empty();
+        ctx.data_mut(|d| {
+            d.insert_temp(menu_section_id(), open_title);
+            d.insert_temp(menu_strip_flag(), strip_open);
+        });
         for command in chosen {
             self.run_menu_command(&ctx, &command);
+        }
+    }
+
+    /// Edit, Pages and Convert as a bar in the layout, under the titles. The page and side panels
+    /// start below it, so the tools never cover the document.
+    pub(crate) fn tool_strip(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        let open_title: String = ctx.data(|d| d.get_temp(menu_section_id())).unwrap_or_default();
+        let strip: bool = ctx.data(|d| d.get_temp(menu_strip_flag())).unwrap_or(false);
+        if open_title.is_empty() || !strip {
+            return;
+        }
+        let bar = craft_menu::layout(&self.menu_bar(&ctx), Target::current(), &layout_options()).bar;
+        let Some(menu) = bar.menus.iter().find(|m| m.title == open_title) else { return };
+        let gate = self.menu_gate(&ctx);
+        let t = crate::theme::Tokens::get(&ctx);
+        let sub_id = menu_ribbon_sub_id();
+        let mut chosen = Vec::new();
+        let shown = egui::Panel::top("pdfcraft-tool-strip")
+            .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(8, 3)).stroke(egui::Stroke::new(1.0, t.divider)))
+            .show(ui, |ui| {
+                paint_ribbon(ui, &menu.children, &gate, &mut chosen, sub_id, 0);
+            });
+        let title_clicked: bool = ctx.data(|d| d.get_temp(menu_title_click_id())).unwrap_or(false);
+        let outside = ctx.input(|i| i.pointer.any_click().then(|| i.pointer.interact_pos()).flatten());
+        let mut still_open = true;
+        if !chosen.is_empty() {
+            still_open = false;
+        } else if let Some(pos) = outside
+            && !title_clicked
+            && !shown.response.rect.contains(pos)
+        {
+            still_open = false;
+        }
+        if !still_open {
+            ctx.data_mut(|d| {
+                d.insert_temp(menu_section_id(), String::new());
+                d.insert_temp(menu_strip_flag(), false);
+                d.insert_temp(sub_id, String::new());
+            });
+        }
+        for command in chosen {
+            self.run_menu_command(&ctx, &command);
+        }
+    }
+
+    /// Escape closes the tool strip before it can clear a text selection. Full screen keeps Escape
+    /// for leaving the screen. A vertical menu is a popup and closes itself.
+    pub(crate) fn close_tool_strip_on_escape(&self, ctx: &egui::Context) {
+        if self.full_screen {
+            return;
+        }
+        let open = ctx.data(|d| d.get_temp::<bool>(menu_strip_flag())).unwrap_or(false);
+        if open && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            ctx.data_mut(|d| {
+                d.insert_temp(menu_section_id(), String::new());
+                d.insert_temp(menu_strip_flag(), false);
+                d.insert_temp(menu_ribbon_sub_id(), String::new());
+            });
         }
     }
 
@@ -641,6 +698,22 @@ impl PdfCraftApp {
             }
         }
     }
+}
+
+fn menu_section_id() -> egui::Id {
+    egui::Id::unique("pdfcraft-menu-section")
+}
+
+fn menu_strip_flag() -> egui::Id {
+    egui::Id::unique("pdfcraft-menu-is-strip")
+}
+
+fn menu_title_click_id() -> egui::Id {
+    egui::Id::unique("pdfcraft-menu-title-clicked")
+}
+
+fn menu_ribbon_sub_id() -> egui::Id {
+    egui::Id::unique("pdfcraft-menu-ribbon-sub")
 }
 
 /// One title in the top bar. The open title carries an accent underline.
@@ -863,9 +936,13 @@ fn ribbon_row(ui: &mut egui::Ui, nodes: &[Node], gate: &Gate, chosen: &mut Vec<C
         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
         for node in nodes {
             match node {
-                Node::Separator => ui.add_space(8.0),
+                Node::Separator => {
+                    let (rect, _) = ui.allocate_exact_size(egui::vec2(9.0, 28.0), egui::Sense::hover());
+                    let t = crate::theme::Tokens::get(ui.ctx());
+                    ui.painter().vline(rect.center().x, rect.y_range().shrink(6.0), egui::Stroke::new(1.0, t.divider));
+                }
                 Node::Standard { label, .. } => {
-                    let _ = ribbon_button(ui, label, None, "square", false, None, false);
+                    let _ = ribbon_button(ui, label, None, "square", false, None, false, false);
                 }
                 Node::Item(item) => {
                     let enabled = item.enabled && gate.allows(item);
@@ -875,7 +952,7 @@ fn ribbon_row(ui: &mut egui::Ui, nodes: &[Node], gate: &Gate, chosen: &mut Vec<C
                         ItemKind::Radio(on) => (egui::accesskit::Role::MenuItemRadio, Some(on)),
                     };
                     let shortcut = item.shortcut.as_ref().map(|c| c.display(platform));
-                    let resp = ribbon_button(ui, &item.label, Some(item.command.id.as_str()), command_icon(&item.command), enabled, on, false);
+                    let resp = ribbon_button(ui, &item.label, Some(item.command.id.as_str()), command_icon(&item.command), enabled, on, false, false);
                     menu_access(&resp, role, &item.label, on, shortcut.as_deref());
                     if enabled && resp.hovered() {
                         hover.item = true;
@@ -886,7 +963,7 @@ fn ribbon_row(ui: &mut egui::Ui, nodes: &[Node], gate: &Gate, chosen: &mut Vec<C
                 }
                 Node::Submenu { label, children, .. } => {
                     let enabled = submenu_enabled(children, gate, depth.saturating_add(1));
-                    let resp = ribbon_button(ui, label, None, submenu_icon(label), enabled, None, open == label);
+                    let resp = ribbon_button(ui, label, None, submenu_icon(label), enabled, None, open == label, true);
                     menu_access(&resp, egui::accesskit::Role::MenuItem, label, None, None);
                     resp.ctx.accesskit_node_builder(resp.id, |n| {
                         n.set_has_popup(egui::accesskit::HasPopup::Menu);
@@ -909,32 +986,51 @@ fn submenu_children<'a>(nodes: &'a [Node], label: &str) -> Option<&'a [Node]> {
     })
 }
 
-/// One tool: icon above a short label. The accessible name is the full label.
-fn ribbon_button(ui: &mut egui::Ui, label: &str, command: Option<&str>, icon: &str, enabled: bool, on: Option<bool>, open: bool) -> egui::Response {
+/// One tool: a small icon and a short label on one line. The accessible name is the full label.
+fn ribbon_button(
+    ui: &mut egui::Ui,
+    label: &str,
+    command: Option<&str>,
+    icon: &str,
+    enabled: bool,
+    on: Option<bool>,
+    open: bool,
+    submenu: bool,
+) -> egui::Response {
     let t = crate::theme::Tokens::get(ui.ctx());
-    let font = crate::theme::medium(11.0);
-    let text_w = crate::widgets::text_width(ui, label, &font).min(132.0);
-    let shown = if crate::widgets::text_width(ui, label, &font) <= 132.0 {
+    let font = crate::theme::medium(12.0);
+    let text_w = crate::widgets::text_width(ui, label, &font).min(118.0);
+    let shown = if crate::widgets::text_width(ui, label, &font) <= 118.0 {
         label.to_owned()
     } else {
-        crate::widgets::fit_line(label, 132.0, |s| crate::widgets::text_width(ui, s, &font))
+        crate::widgets::fit_line(label, 118.0, |s| crate::widgets::text_width(ui, s, &font))
     };
+    let caret = if submenu { 12.0 } else { 0.0 };
     let resp = ui
         .add_enabled_ui(enabled, |ui| {
-            let (rect, resp) = ui.allocate_exact_size(egui::vec2(text_w.max(36.0) + 18.0, 58.0), egui::Sense::click());
+            let (rect, resp) = ui.allocate_exact_size(egui::vec2(8.0 + 16.0 + 6.0 + text_w + caret + 8.0, 28.0), egui::Sense::click());
             let press = crate::theme::Press::track(ui, &resp);
-            let fill = if open || on == Some(true) { t.accent.gamma_multiply(0.16) } else { press.wash_color(&t, false) };
+            let fill = if open || on == Some(true) { t.accent.gamma_multiply(0.12) } else { press.wash_color(&t, false) };
             if fill.a() > 0 {
-                ui.painter().rect_filled(rect, egui::CornerRadius::same(8), fill);
+                ui.painter().rect_filled(rect, egui::CornerRadius::same(4), fill);
             }
             let fg = if enabled { t.text } else { t.text_faint };
             let body = rect.translate(press.offset());
-            let badge = egui::Rect::from_center_size(body.center() - egui::vec2(0.0, 12.0), egui::vec2(28.0, 30.0));
-            let marked = command.is_some_and(|id| crate::panels::export_badge(ui, badge, id));
+            let mark = egui::Rect::from_center_size(egui::pos2(body.left() + 16.0, body.center().y), egui::vec2(16.0, 18.0));
+            let marked = command.is_some_and(|id| crate::panels::export_badge(ui, mark, id));
             if !marked {
-                crate::icons::paint(ui, egui::Rect::from_center_size(body.center() - egui::vec2(0.0, 10.0), egui::vec2(18.0, 18.0)), icon, 18.0, fg);
+                crate::icons::paint(ui, egui::Rect::from_center_size(mark.center(), egui::vec2(15.0, 15.0)), icon, 15.0, fg);
             }
-            ui.painter().text(body.center() + egui::vec2(0.0, 14.0), egui::Align2::CENTER_CENTER, shown, font, fg);
+            crate::widgets::paint_left(ui, egui::pos2(body.left() + 30.0, body.center().y), &shown, font, fg, text_w);
+            if submenu {
+                crate::icons::paint(
+                    ui,
+                    egui::Rect::from_center_size(egui::pos2(body.right() - 10.0, body.center().y), egui::vec2(12.0, 12.0)),
+                    "chevron-down",
+                    12.0,
+                    t.text_muted,
+                );
+            }
             resp
         })
         .inner;

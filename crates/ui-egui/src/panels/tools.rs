@@ -359,7 +359,8 @@ pub(crate) fn export_badge(ui: &egui::Ui, rect: Rect, command: &str) -> bool {
     }
     painter.rect_filled(rect, CornerRadius::same(3), color);
     if !stack {
-        let fold = Rect::from_min_size(rect.right_top() - vec2(6.0, 0.0), vec2(6.0, 6.0));
+        let fold_size = (rect.width() * 0.28).clamp(3.0, 6.0);
+        let fold = Rect::from_min_size(rect.right_top() - vec2(fold_size, 0.0), vec2(fold_size, fold_size));
         painter.rect_filled(fold, CornerRadius::same(1), Color32::from_white_alpha(210));
     }
     let font_size = (rect.height() * 0.34).clamp(6.5, 11.0);

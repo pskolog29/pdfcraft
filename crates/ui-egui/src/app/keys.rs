@@ -30,6 +30,9 @@ impl PdfCraftApp {
         {
             return;
         }
+        // The tool strip is part of the layout, not a popup, so Escape closes it here before a
+        // selection or find field can take the key.
+        self.close_tool_strip_on_escape(ctx);
         // The in-window menu bar holds the keys while one of its menus is open or it has the
         // keyboard (Alt, F10); a command shortcut leaves it and runs.
         craft_menu::bar::leave_for_shortcut(ctx);

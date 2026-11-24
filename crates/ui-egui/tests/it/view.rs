@@ -2268,6 +2268,8 @@ fn the_tool_menus_open_a_horizontal_strip() {
     assert!(redo.left() > undo.right() - 1.0, "Edit tools sit in a row: {undo:?} {redo:?}");
     assert!((redo.top() - undo.top()).abs() < 8.0, "Edit is a horizontal strip");
     assert!(undo.top() + 1.0 >= edit.bottom(), "the strip opens under the titles");
+    let viewport = h.state().views[0].viewport_rect();
+    assert!(viewport.top() + 1.0 >= undo.bottom(), "the page starts below the strip: {viewport:?} {undo:?}");
     assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "opening Edit closes File");
     crate::support::open_menu(&mut h, "Pages");
     crate::support::menu_row(&h, "Delete pages");

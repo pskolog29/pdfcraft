@@ -89,35 +89,36 @@ pub(super) fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let shown = shorten_middle(&name, 80);
     let mut choice: Option<Option<bool>> = None;
     let modal = widgets::show_modal(ctx, "save_prompt", |ui| {
-        ui.set_width(420.0);
-        ui.horizontal(|ui| {
-            ui.add(crate::icons::image("save", 22.0, t.accent));
-            let title = ui.add(
-                egui::Label::new(
-                    egui::RichText::new(crate::i18n::fmt(tl!("Save changes to “{name}” before closing?"), &[("name", &shown)]))
-                        .font(theme::semibold(16.0)),
-                )
-                .wrap(),
-            );
-            if shown != name {
-                title.on_hover_text(&name);
-            }
-        });
+        ui.set_width(440.0);
+        ui.label(egui::RichText::new(tl!("Unsaved changes")).font(theme::medium(12.0)).color(t.text_muted));
+        ui.add_space(8.0);
+        let rule = ui.cursor().left();
+        let width = ui.available_width();
+        let y = ui.cursor().top();
+        ui.painter().hline(rule..=rule + width, y, egui::Stroke::new(1.0, t.divider));
+        ui.add_space(14.0);
+        let question = crate::i18n::fmt(tl!("Save changes to “{name}” before closing?"), &[("name", &shown)]);
+        let title = ui.add(egui::Label::new(egui::RichText::new(question).font(theme::semibold(15.0))).wrap());
+        if shown != name {
+            title.on_hover_text(&name);
+        }
         ui.add_space(6.0);
         ui.label(egui::RichText::new(tl!("Your changes will be lost if you don't save them.")).color(t.text_muted));
-        ui.add_space(14.0);
+        ui.add_space(18.0);
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
             let chosen = app.save_prompt_button;
-            if widgets::pill_button_marked(ui, tl!("Save"), true, chosen == PromptButton::Save).clicked() {
+            if prompt_button(ui, tl!("Save"), PromptKind::Primary, chosen == PromptButton::Save).clicked() {
                 choice = Some(Some(true));
             }
-            if widgets::pill_button_marked(ui, tl!("Cancel"), false, chosen == PromptButton::Cancel).clicked() {
+            if prompt_button(ui, tl!("Cancel"), PromptKind::Outline, chosen == PromptButton::Cancel).clicked() {
                 choice = Some(None);
             }
-            ui.add_space(24.0);
-            if widgets::pill_button_marked(ui, tl!("Don't save"), false, chosen == PromptButton::DontSave).clicked() {
-                choice = Some(Some(false));
-            }
+            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                if prompt_button(ui, tl!("Don't save"), PromptKind::Quiet, chosen == PromptButton::DontSave).clicked() {
+                    choice = Some(Some(false));
+                }
+            });
         });
     });
     if choice.is_none() && modal.should_close() {
@@ -126,6 +127,54 @@ pub(super) fn save_prompt(app: &mut PdfCraftApp, ctx: &egui::Context) {
     if let Some(c) = choice {
         app.resolve_close(ctx, c);
     }
+}
+
+/// How a save-prompt button is drawn. The labels stay the ones the keyboard and tests use.
+#[derive(Clone, Copy)]
+enum PromptKind {
+    /// Text only, for leaving without saving.
+    Quiet,
+    /// A bordered button, for staying in the document.
+    Outline,
+    /// The filled action, for writing the file.
+    Primary,
+}
+
+fn prompt_button(ui: &mut egui::Ui, label: &str, kind: PromptKind, marked: bool) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
+    let primary = matches!(kind, PromptKind::Primary);
+    let text_color = if primary {
+        egui::Color32::WHITE
+    } else if matches!(kind, PromptKind::Quiet) {
+        t.text_muted
+    } else {
+        t.text
+    };
+    let font = theme::medium(13.0);
+    let galley = crate::bidi::layout_ui(ui, label.to_owned(), font, text_color);
+    let width = (galley.size().x + if matches!(kind, PromptKind::Quiet) { 12.0 } else { 28.0 }).max(if matches!(kind, PromptKind::Quiet) {
+        0.0
+    } else {
+        88.0
+    });
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, 32.0), egui::Sense::click());
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, ui.is_enabled(), label));
+    let press = theme::Press::track(ui, &resp);
+    let (fill, stroke) = match kind {
+        PromptKind::Primary => (press.fill(t.accent, t.accent_text, t.accent.lerp_to_gamma(egui::Color32::BLACK, 0.18)), egui::Stroke::NONE),
+        PromptKind::Outline => (press.fill(t.card, t.hover, t.pressed), egui::Stroke::new(1.0, t.border)),
+        PromptKind::Quiet => (press.fill(egui::Color32::TRANSPARENT, t.hover, t.pressed), egui::Stroke::NONE),
+    };
+    if fill.a() > 0 || stroke != egui::Stroke::NONE {
+        ui.painter().rect(rect, egui::CornerRadius::same(4), fill, stroke, egui::StrokeKind::Inside);
+    }
+    if marked {
+        resp.request_focus();
+        ui.painter().rect_stroke(rect.expand(2.0), egui::CornerRadius::same(6), egui::Stroke::new(1.5, t.accent), egui::StrokeKind::Outside);
+    }
+    let body = rect.translate(press.offset());
+    ui.painter().galley(body.center() - galley.size() / 2.0, galley, text_color);
+    theme::hand(resp)
 }
 
 /// `name` cut to at most `max` characters by replacing its middle with "…", keeping the start and
