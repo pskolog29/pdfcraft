@@ -7,6 +7,7 @@
 /// The Turkish for `english`, when this copy has one.
 pub(super) fn phrase(english: &str) -> Option<&'static str> {
     Some(match english {
+        "Menu" => "Menü",
         "File" => "Dosya",
         "Edit" => "Düzen",
         "View" => "Görünüm",
@@ -143,6 +144,18 @@ pub(super) fn phrase(english: &str) -> Option<&'static str> {
         "Create a PDF" => "PDF oluştur",
         "Edit a PDF" => "PDF düzenle",
         "Export a PDF" => "PDF dışa aktar",
+        "Export to" => "Dosya türü",
+        "New blank PDF" => "Yeni boş PDF",
+        "Combine files…" => "Dosyaları birleştir…",
+        "Ready" => "Hazır",
+        "Microsoft Word (.docx)" => "Word belgesi (.docx)",
+        "Spreadsheet (.xlsx)" => "Hesap tablosu (.xlsx)",
+        "Presentation (.pptx)" => "Sunu (.pptx)",
+        "Image (PNG)" => "Görüntü (PNG)",
+        "Export all images" => "Tüm görüntüleri dışa aktar",
+        "HTML web page" => "HTML web sayfası",
+        "Rich Text Format (.rtf)" => "Zengin metin (.rtf)",
+        "Text (plain)" => "Düz metin",
         "Combine files" => "Dosyaları birleştir",
         "Organize pages" => "Sayfaları düzenle",
         "Scan & OCR" => "Tara ve tanı",

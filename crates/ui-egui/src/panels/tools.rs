@@ -279,13 +279,16 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
                 press.wash(ui, rect, 6, false);
                 let body = rect.translate(press.offset());
                 let fg = if ready { t.text } else { t.text_muted };
-                icons::paint(
-                    ui,
-                    Rect::from_min_size(body.min + vec2(6.0, 8.0), vec2(18.0, 18.0)),
-                    item.icon,
-                    17.0,
-                    if ready { icon_color(t) } else { t.text_faint },
-                );
+                let badge = Rect::from_min_size(body.min + vec2(6.0, 6.0), vec2(20.0, 22.0));
+                if !export_badge(ui, badge, item.command) {
+                    icons::paint(
+                        ui,
+                        Rect::from_min_size(body.min + vec2(6.0, 8.0), vec2(18.0, 18.0)),
+                        item.icon,
+                        17.0,
+                        if ready { icon_color(t) } else { t.text_faint },
+                    );
+                }
                 let (chip, fill, cfg) = match item.availability {
                     Availability::Ready => (tl!("Ready"), Color32::from_rgb(0xDD, 0xF3, 0xE4), Color32::from_rgb(0x1E, 0x7B, 0x43)),
                     Availability::Planned(m) => (m, t.pressed, t.text_muted),
@@ -342,4 +345,37 @@ fn tool_detail(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, g: &'static
     if let Some(cmd) = run {
         app.run_command(cmd);
     }
+}
+
+/// A small original page for an export format. The letters name the file type; the
+/// shape is ours, not a vendor logo.
+fn export_badge(ui: &egui::Ui, rect: Rect, command: &str) -> bool {
+    let Some((letters, color, stack)) = export_mark(command) else { return false };
+    let painter = ui.painter();
+    if stack {
+        let back = rect.translate(vec2(3.0, -2.0));
+        painter.rect_filled(back, CornerRadius::same(3), Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 150));
+    }
+    painter.rect_filled(rect, CornerRadius::same(3), color);
+    if !stack {
+        let fold = Rect::from_min_size(rect.right_top() - vec2(6.0, 0.0), vec2(6.0, 6.0));
+        painter.rect_filled(fold, CornerRadius::same(1), Color32::from_white_alpha(210));
+    }
+    painter.text(rect.center() + vec2(if stack { 0.0 } else { -1.0 }, 1.0), Align2::CENTER_CENTER, letters, theme::semibold(6.5), Color32::WHITE);
+    true
+}
+
+fn export_mark(command: &str) -> Option<(&'static str, Color32, bool)> {
+    Some(match command {
+        "export.docx" => ("DOC", Color32::from_rgb(0x3B, 0x6F, 0xD4), false),
+        "export.xlsx" => ("XLS", Color32::from_rgb(0x2E, 0x8B, 0x57), false),
+        "export.pptx" => ("PPT", Color32::from_rgb(0xE0, 0x7A, 0x2F), false),
+        "export.image" => ("PNG", Color32::from_rgb(0x7C, 0x5C, 0xBF), false),
+        "export.all_images" => ("IMG", Color32::from_rgb(0x7C, 0x5C, 0xBF), true),
+        "export.html" => ("HTM", Color32::from_rgb(0xD9, 0x77, 0x06), false),
+        "export.rtf" => ("RTF", Color32::from_rgb(0x0E, 0x74, 0x90), false),
+        "export.text" => ("TXT", Color32::from_rgb(0x64, 0x74, 0x8B), false),
+        "export.ps" => ("PS", Color32::from_rgb(0x33, 0x41, 0x55), false),
+        _ => return None,
+    })
 }

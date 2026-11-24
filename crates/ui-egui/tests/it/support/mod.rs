@@ -51,11 +51,25 @@ pub fn wait_until(h: &mut Harness<'static, PdfCraftApp>, what: &str, ready: impl
     );
 }
 
-/// Open the in-window menu bar's `title` menu (File, Edit, View…).
+/// Open the in-window Menu accordion's `title` section (File, Edit, View…).
 pub fn open_menu(h: &mut Harness<'static, PdfCraftApp>, title: &str) {
-    use egui_kittest::kittest::Queryable;
-    h.get_by(|n| n.role() == egui::accesskit::Role::MenuItem && n.label().as_deref() == Some(title)).click();
-    h.run_steps(2);
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let item = |label: &str| {
+        let label = label.to_owned();
+        move |n: &egui_kittest::kittest::AccessKitNode<'_>| {
+            n.role() == egui::accesskit::Role::MenuItem && n.label().as_deref() == Some(label.as_str())
+        }
+    };
+    if h.query_all_by(item(title)).next().is_none() {
+        h.get_by(item("Menu")).click();
+        h.run_steps(2);
+    }
+    let header = h.get_by(item(title));
+    // A second click on an open section would collapse it.
+    if header.accesskit_node().data().is_expanded() != Some(true) {
+        header.click();
+        h.run_steps(2);
+    }
 }
 
 /// The menu row labelled `label` in an open menu.

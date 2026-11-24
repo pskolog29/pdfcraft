@@ -543,9 +543,8 @@ fn language_switch_preserves_document_and_command_ids() {
         assert_eq!(ok(&mut h, &c, "ui.commands", json!({})), commands);
 
         let lang = i18n::Lang::from_code(code).unwrap();
-        // A title without an ASCII letter shows its mnemonic after it ("ファイル(F)").
-        let file = i18n::tr(lang, "File");
-        h.get_by(|n| n.role() == egui::accesskit::Role::MenuItem && n.label().is_some_and(|l| l.starts_with(file))).click();
+        // The sections live under one Menu button. File starts open.
+        h.get_by(|n| n.role() == egui::accesskit::Role::MenuItem && n.label().is_some_and(|l| l.starts_with("Menu"))).click();
         h.run_steps(2);
         // The mnemonic goes before an ellipsis: "開く(O)…".
         let open = i18n::tr(lang, "Open…").trim_end_matches('…');
@@ -1076,13 +1075,15 @@ fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
     }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
-    // The menu bar's Edit menu holds Preferences. Titles and rows carry their mnemonic
-    // ("編集(E)", "環境設定(P)…"), so match by the start of the label.
+    // Preferences sits in the Edit section of the Menu accordion. Titles may carry a
+    // mnemonic ("編集(E)", "環境設定(P)…"), so match by the start of the label.
     let menu_row = |text: &'static str| {
         move |n: &egui_kittest::kittest::AccessKitNode<'_>| {
             n.role() == egui::accesskit::Role::MenuItem && n.label().is_some_and(|l| l.starts_with(text))
         }
     };
+    h.get_by(menu_row("Menu")).click();
+    h.run_steps(2);
     h.get_by(menu_row("編集")).click();
     h.run_steps(2);
     h.get_by(menu_row("環境設定")).click();

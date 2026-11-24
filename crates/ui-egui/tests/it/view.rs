@@ -2244,6 +2244,21 @@ fn switching_modes_keeps_the_current_page_at_fixed_zoom() {
 }
 
 #[test]
+fn the_menu_bar_is_one_accordion() {
+    use egui_kittest::kittest::Queryable;
+    let mut h = harness(&[]);
+    let menu_item = |label: &'static str| {
+        move |n: &egui_kittest::kittest::AccessKitNode<'_>| n.role() == egui::accesskit::Role::MenuItem && n.label().as_deref() == Some(label)
+    };
+    assert_eq!(h.query_all_by(menu_item("File")).count(), 0, "File stays inside the Menu button");
+    crate::support::open_menu(&mut h, "File");
+    crate::support::menu_row(&h, "Save");
+    crate::support::open_menu(&mut h, "Edit");
+    crate::support::menu_row(&h, "Preferences…");
+    assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "opening Edit closes File");
+}
+
+#[test]
 fn long_view_menu_fits_a_short_window() {
     use egui_kittest::kittest::Queryable;
     let mut h = Harness::builder().with_size(egui::vec2(1000.0, 400.0)).build_eframe(|_cc| {

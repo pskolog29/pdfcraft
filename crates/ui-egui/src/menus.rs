@@ -9,7 +9,7 @@
 
 use craft_keymap::{Key, Mods};
 use craft_menu::{
-    Builtin, Chord, CommandRef, Document, Gate, Item, ItemRole, ItemState, Labeled, LayoutOptions, Menu, MenuBar, MenuRole, Node, Target,
+    Builtin, Chord, CommandRef, Document, Gate, Item, ItemKind, ItemRole, ItemState, LayoutOptions, Menu, MenuBar, MenuRole, Node, Target,
 };
 use pdfcraft_engine::catalog::{Availability, TOOL_GROUPS};
 use pdfcraft_engine::commands::{self, Shortcut};
@@ -22,11 +22,6 @@ pub(super) mod tab_context;
 
 /// The app's name in the menus the layouts write (About, Hide, Quit).
 pub(crate) const APP_NAME: &str = "Arif Pdf";
-
-/// The top bar's width after the menus: the mode tabs, the search box and the buttons.
-const ROW_AFTER_MENUS: f32 = 720.0;
-/// The narrowest the menu bar gets: one "Menu" title.
-const MIN_MENUS_WIDTH: f32 = 80.0;
 
 /// Menu-only commands. The registry's commands keep their own ids.
 pub(crate) const CUT: &str = "edit.cut";
@@ -77,30 +72,6 @@ const PANELS: &[(RightPanel, &str, &str)] = &[
     (RightPanel::Tags, "tags", "Tags"),
     (RightPanel::Search, "search", "Search"),
     (RightPanel::Compare, "compare", "Compare"),
-];
-
-/// The English titles of the menus and submenus, for the bar's mnemonics in languages whose
-/// labels have no ASCII letter.
-const TITLES: &[&str] = &[
-    "File",
-    "Edit",
-    "View",
-    "Pages",
-    "Sign",
-    "Window",
-    "Help",
-    "Open Recent",
-    "Create",
-    "Export",
-    "Protect",
-    "Zoom",
-    "Rotate view",
-    "Page navigation",
-    "Page display",
-    "Side panels",
-    "Display theme",
-    "Tools",
-    "Fill & Sign",
 ];
 
 /// Separator.
@@ -237,24 +208,6 @@ pub(crate) fn chord(s: Shortcut) -> Option<Chord> {
 
 fn extra(id: &str) -> Option<&'static (&'static str, &'static str, Option<Shortcut>)> {
     EXTRA.iter().find(|(e, ..)| *e == id)
-}
-
-/// The English label of an item's command, for the bar's mnemonics.
-fn english_label(command: &CommandRef) -> Option<String> {
-    if let Some(spec) = commands::command(&command.id) {
-        return Some(spec.label.to_owned());
-    }
-    if let Some((_, label, _)) = extra(&command.id) {
-        return Some((*label).to_owned());
-    }
-    FILL.iter().find(|(id, _)| *id == command.id).map(|(_, label)| (*label).to_owned())
-}
-
-fn english(labeled: Labeled<'_>) -> Option<String> {
-    match labeled {
-        Labeled::Command(command) => english_label(command),
-        Labeled::Title(shown) => TITLES.iter().find(|t| tl!(t) == shown).map(|t| (*t).to_owned()),
-    }
 }
 
 fn translate(english: &'static str) -> String {
@@ -572,21 +525,62 @@ impl PdfCraftApp {
     }
 
     /// The menu bar drawn in the window (Windows, Linux, the web, and macOS when the native one
-    /// couldn't be installed), where the top bar starts. Runs the commands chosen.
+    /// couldn't be installed), where the top bar starts. One Menu button opens every section as
+    /// an accordion; the native macOS bar stays a normal menu bar. Runs the commands chosen.
     pub(crate) fn menu_bar_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         let bar = craft_menu::layout(&self.menu_bar(&ctx), Target::current(), &layout_options()).bar;
         let gate = self.menu_gate(&ctx);
-        // The mode tabs, search and buttons follow the bar in the same row: it takes its titles'
-        // width, less when the row is short, where the menus that don't fit move into its "⋯".
-        let fit = (ui.available_width() - ROW_AFTER_MENUS).max(MIN_MENUS_WIDTH);
-        let chosen = craft_menu::MenuBarUi::new(&bar)
-            .gate(gate)
-            .label(&translate)
-            .english(&english)
-            .id(egui::Id::unique("pdfcraft-menu-bar"))
-            .shrink_to_fit(fit)
-            .show(ui);
+        let section_id = ui.make_persistent_id("pdfcraft-menu-section");
+        let stored: Option<String> = ctx.data(|d| d.get_temp(section_id));
+        let file_title = bar.menus.iter().find(|m| m.role == MenuRole::File).map(|m| m.title.clone()).unwrap_or_default();
+        let open_title = stored.unwrap_or(file_title);
+        // Read every frame so the choice survives while the button is closed.
+        ctx.data_mut(|d| d.insert_temp(section_id, open_title.clone()));
+        let label = tl!("Menu");
+        let mut chosen = Vec::new();
+        let mut open_now = open_title;
+        // A click on a section header stays inside the popup. Choosing an item calls `ui.close`.
+        let config = egui::containers::menu::MenuConfig::default().close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside);
+        let shown = egui::containers::menu::MenuButton::new(format!("{label}   ")).config(config).ui(ui, |ui| {
+            ui.set_min_width(248.0);
+            ui.set_max_width(280.0);
+            ui.spacing_mut().item_spacing.y = 3.0;
+            let headers = bar.menus.len() as f32 * 36.0;
+            // Keep every section header inside the window. A tall open section scrolls
+            // instead of pushing the next header past the popup.
+            let room = (ui.ctx().content_rect().height() - ui.min_rect().top() - headers - 36.0).max(96.0);
+            let max_h = room.min(280.0);
+            for menu in &bar.menus {
+                let open = open_now == menu.title;
+                if section_header(ui, menu, open).clicked() {
+                    open_now = if open { String::new() } else { menu.title.clone() };
+                    ui.ctx().data_mut(|d| d.insert_temp(section_id, open_now.clone()));
+                }
+                if open_now == menu.title {
+                    egui::ScrollArea::vertical().id_salt(("pdfcraft-menu", &menu.title)).max_height(max_h).auto_shrink([false, true]).show(
+                        ui,
+                        |ui| {
+                            ui.set_min_width(236.0);
+                            ui.set_max_width(268.0);
+                            paint_nodes(ui, &menu.children, &gate, &mut chosen, 0);
+                        },
+                    );
+                }
+            }
+        });
+        shown.0.ctx.accesskit_node_builder(shown.0.id, |n| {
+            n.set_role(egui::accesskit::Role::MenuItem);
+            n.set_label(label);
+        });
+        let chevron = shown.0.rect.right_center() - egui::vec2(14.0, 0.0);
+        crate::icons::paint(
+            ui,
+            egui::Rect::from_center_size(chevron, egui::vec2(12.0, 12.0)),
+            "chevron-down",
+            12.0,
+            crate::theme::Tokens::get(&ctx).text,
+        );
         for command in chosen {
             self.run_menu_command(&ctx, &command);
         }
@@ -626,6 +620,138 @@ impl PdfCraftApp {
                 log::info!("menu shortcut {:?} kept by {} over {} ({})", clash.shortcut, clash.command.id, clash.system, clash.resolution);
             }
         }
+    }
+}
+
+/// One accordion header. The open section is the dark row; the others stay light.
+fn section_header(ui: &mut egui::Ui, menu: &Menu, open: bool) -> egui::Response {
+    let t = crate::theme::Tokens::get(ui.ctx());
+    let width = ui.available_width().clamp(220.0, 280.0);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, 34.0), egui::Sense::click());
+    let fill = if open { egui::Color32::from_rgb(0x1E, 0x3A, 0x4C) } else { t.card };
+    let fg = if open { egui::Color32::WHITE } else { t.text };
+    ui.painter().rect_filled(rect, egui::CornerRadius::same(6), fill);
+    if !open {
+        ui.painter().rect_stroke(rect, egui::CornerRadius::same(6), egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    }
+    let icon = match menu.role {
+        MenuRole::File => "folder",
+        MenuRole::Edit => "pencil",
+        MenuRole::View => "eye",
+        MenuRole::Window => "app-window",
+        MenuRole::Help => "circle-help",
+        MenuRole::App | MenuRole::Other => "signature",
+    };
+    crate::icons::paint(ui, egui::Rect::from_min_size(rect.min + egui::vec2(8.0, 9.0), egui::vec2(16.0, 16.0)), icon, 16.0, fg);
+    ui.painter().text(rect.left_center() + egui::vec2(30.0, 0.0), egui::Align2::LEFT_CENTER, &menu.title, crate::theme::semibold(13.0), fg);
+    let mark = if open { "chevron-down" } else { "chevron-right" };
+    crate::icons::paint(ui, egui::Rect::from_center_size(rect.right_center() - egui::vec2(16.0, 0.0), egui::vec2(14.0, 14.0)), mark, 14.0, fg);
+    let title = menu.title.clone();
+    resp.ctx.accesskit_node_builder(resp.id, |n| {
+        n.set_role(egui::accesskit::Role::MenuItem);
+        n.set_label(title);
+        n.set_expanded(open);
+    });
+    resp
+}
+
+/// The rows of one open section, and of a submenu that opened on hover.
+fn paint_nodes(ui: &mut egui::Ui, nodes: &[Node], gate: &Gate, chosen: &mut Vec<CommandRef>, depth: u8) {
+    // A menu tree that looped would otherwise grow the stack without a bound.
+    if depth >= 8 {
+        return;
+    }
+    ui.set_max_width(268.0);
+    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+    ui.spacing_mut().item_spacing.y = 0.0;
+    let platform = menu_platform(ui.ctx());
+    let t = crate::theme::Tokens::get(ui.ctx());
+    for node in nodes {
+        match node {
+            Node::Separator => {
+                ui.add_space(3.0);
+                ui.separator();
+                ui.add_space(3.0);
+            }
+            Node::Standard { label, .. } => {
+                let resp = ui.add_enabled(false, egui::Button::new(label.as_str()).min_size(egui::vec2(ui.available_width(), 28.0)));
+                menu_access(&resp, egui::accesskit::Role::MenuItem, label, None, None);
+            }
+            Node::Item(item) => {
+                let enabled = item.enabled && gate.allows(item);
+                let (role, on) = match item.kind {
+                    ItemKind::Plain => (egui::accesskit::Role::MenuItem, None),
+                    ItemKind::Check(on) => (egui::accesskit::Role::MenuItemCheckBox, Some(on)),
+                    ItemKind::Radio(on) => (egui::accesskit::Role::MenuItemRadio, Some(on)),
+                };
+                let shortcut = item.shortcut.as_ref().map(|c| c.display(platform));
+                let resp = ui.add_enabled(enabled, egui::Button::new(item.label.as_str()).min_size(egui::vec2(ui.available_width(), 28.0)));
+                if let Some(text) = &shortcut {
+                    let color = if enabled { t.text_muted } else { t.text_faint };
+                    ui.painter().text(
+                        resp.rect.right_center() - egui::vec2(12.0, 0.0),
+                        egui::Align2::RIGHT_CENTER,
+                        text,
+                        egui::TextStyle::Button.resolve(ui.style()),
+                        color,
+                    );
+                }
+                menu_access(&resp, role, &item.label, on, shortcut.as_deref());
+                if resp.clicked() {
+                    chosen.push(item.command.clone());
+                    ui.close();
+                }
+            }
+            Node::Submenu { label, children, .. } => {
+                let enabled = submenu_enabled(children, gate, depth.saturating_add(1));
+                let resp = ui.add_enabled(
+                    enabled,
+                    egui::Button::new(label.as_str())
+                        .min_size(egui::vec2(ui.available_width(), 28.0))
+                        .right_text(egui::containers::menu::SubMenuButton::arrow_atom(None)),
+                );
+                menu_access(&resp, egui::accesskit::Role::MenuItem, label, None, None);
+                resp.ctx.accesskit_node_builder(resp.id, |n| n.set_has_popup(egui::accesskit::HasPopup::Menu));
+                egui::containers::menu::SubMenu::new().show(ui, &resp, |ui| {
+                    paint_nodes(ui, children, gate, chosen, depth.saturating_add(1));
+                });
+            }
+        }
+    }
+}
+
+fn menu_access(resp: &egui::Response, role: egui::accesskit::Role, label: &str, on: Option<bool>, shortcut: Option<&str>) {
+    let label = label.to_owned();
+    resp.ctx.accesskit_node_builder(resp.id, |n| {
+        n.set_role(role);
+        n.set_label(label);
+        match on {
+            Some(true) => n.set_toggled(egui::accesskit::Toggled::True),
+            Some(false) => n.set_toggled(egui::accesskit::Toggled::False),
+            None => n.clear_toggled(),
+        }
+        if let Some(shortcut) = shortcut {
+            n.set_keyboard_shortcut(shortcut);
+        }
+    });
+}
+
+/// A submenu can be opened when one of its items can run.
+fn submenu_enabled(nodes: &[Node], gate: &Gate, depth: u8) -> bool {
+    depth < 8
+        && nodes.iter().any(|node| match node {
+            Node::Item(item) => item.enabled && gate.allows(item),
+            Node::Submenu { children, .. } => submenu_enabled(children, gate, depth.saturating_add(1)),
+            Node::Separator | Node::Standard { .. } => false,
+        })
+}
+
+/// Shortcuts follow the operating system the window reports, so a Mac session never prints Ctrl+.
+fn menu_platform(ctx: &egui::Context) -> craft_keymap::Platform {
+    match ctx.os() {
+        egui::os::OperatingSystem::Mac => craft_keymap::Platform::Mac,
+        egui::os::OperatingSystem::Windows => craft_keymap::Platform::Windows,
+        _ => craft_keymap::Platform::Linux,
     }
 }
 
