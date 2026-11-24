@@ -102,6 +102,65 @@ fn segment(ui: &mut egui::Ui, t: &Tokens, label: &str, on: bool) -> egui::Respon
     resp
 }
 
+/// The red mark on a selected radio button or checkbox in this dialog.
+const MARK: Color32 = Color32::from_rgb(0xD9, 0x32, 0x32);
+
+/// A checkbox whose tick is red. The label stays the ordinary text colour.
+fn red_check(ui: &mut egui::Ui, checked: &mut bool, label: &str) -> egui::Response {
+    let mut resp = mark_row(ui, true, *checked, label);
+    if resp.clicked() {
+        *checked = !*checked;
+        resp.mark_changed();
+    }
+    resp
+}
+
+/// A radio button whose selected dot is red.
+fn red_radio(ui: &mut egui::Ui, on: bool, label: &str) -> egui::Response {
+    mark_row(ui, false, on, label)
+}
+
+/// [`red_radio`] that selects `alternative` when clicked.
+fn red_radio_value<T: PartialEq + Copy>(ui: &mut egui::Ui, current: &mut T, alternative: T, label: &str) -> egui::Response {
+    let mut resp = red_radio(ui, *current == alternative, label);
+    if resp.clicked() && *current != alternative {
+        *current = alternative;
+        resp.mark_changed();
+    }
+    resp
+}
+
+/// One radio button or checkbox: the mark on the left, the label on the right.
+fn mark_row(ui: &mut egui::Ui, check: bool, on: bool, label: &str) -> egui::Response {
+    let t = Tokens::get(ui.ctx());
+    let galley = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), theme::regular(13.0), t.text));
+    let side = ui.spacing().icon_width.max(14.0);
+    let gap = ui.spacing().icon_spacing;
+    let (rect, resp) = ui.allocate_exact_size(vec2(side + gap + galley.size().x, side.max(galley.size().y)), egui::Sense::click());
+    let role = if check { egui::accesskit::Role::CheckBox } else { egui::accesskit::Role::RadioButton };
+    resp.widget_info(|| egui::WidgetInfo::selected(role, ui.is_enabled(), on, label));
+    let icon = Rect::from_center_size(pos2(rect.left() + side * 0.5, rect.center().y), vec2(side, side));
+    let edge = if on { MARK } else { t.border };
+    let fill = if on { Color32::WHITE } else { t.hover };
+    if check {
+        ui.painter().rect(icon, 3.0, fill, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+        if on {
+            let inner = icon.shrink(side * 0.28);
+            ui.painter().add(egui::Shape::line(
+                vec![pos2(inner.left(), inner.center().y), pos2(inner.center().x, inner.bottom()), pos2(inner.right(), inner.top())],
+                Stroke::new(2.0, MARK),
+            ));
+        }
+    } else {
+        ui.painter().circle(icon.center(), side * 0.5 - 0.5, fill, Stroke::new(1.5, edge));
+        if on {
+            ui.painter().circle_filled(icon.center(), side * 0.22, MARK);
+        }
+    }
+    ui.painter().galley(pos2(rect.left() + side + gap, rect.center().y - galley.size().y * 0.5), galley, t.text);
+    resp
+}
+
 /// The red print action. Cancel stays the ordinary pill.
 fn print_action(ui: &mut egui::Ui, label: &str) -> egui::Response {
     let galley = ui.fonts_mut(|f| f.layout_no_wrap(label.to_owned(), theme::medium(13.0), Color32::WHITE));
@@ -287,15 +346,15 @@ pub(crate) fn body(
                 }
             }
             ui.horizontal_wrapped(|ui| {
-                ui.add(widgets::checkbox(&mut d.collate, tl!("Collate")));
+                red_check(ui, &mut d.collate, &tl!("Collate"));
                 let mut center = matches!(d.size, SizeMode::Fit);
-                if ui.add(widgets::checkbox(&mut center, tl!("Center on page"))).changed() {
+                if red_check(ui, &mut center, &tl!("Center on page")).changed() {
                     d.size = if center { SizeMode::Fit } else { SizeMode::Actual };
                 }
-                ui.add(widgets::checkbox(&mut d.auto_rotate, tl!("Auto-rotate pages")));
+                red_check(ui, &mut d.auto_rotate, &tl!("Auto-rotate pages"));
                 let browser = d.printer.as_deref() == Some(crate::web_print::BROWSER_PRINTER);
                 ui.add_enabled_ui(!browser, |ui| {
-                    ui.add(widgets::checkbox(&mut d.grayscale, tl!("Print in grayscale")));
+                    red_check(ui, &mut d.grayscale, &tl!("Print in grayscale"));
                 });
             });
             if let Some(&source) = sizes.get(d.current_page) {
@@ -318,9 +377,9 @@ pub(crate) fn body(
             ui.add_space(6.0);
             soft_heading(ui, t, tl!("Pages to Print"));
             ui.horizontal(|ui| {
-                widgets::radio_value(ui, &mut d.which, Which::All, tl!("All"));
-                widgets::radio_value(ui, &mut d.which, Which::Current, tl!("Current page"));
-                let pages = widgets::radio_value(ui, &mut d.which, Which::Range, tl!("Pages"));
+                red_radio_value(ui, &mut d.which, Which::All, &tl!("All"));
+                red_radio_value(ui, &mut d.which, Which::Current, &tl!("Current page"));
+                let pages = red_radio_value(ui, &mut d.which, Which::Range, &tl!("Pages"));
                 let r = ui.add_enabled(
                     d.which == Which::Range,
                     crate::widgets::line(&mut d.range).hint_text(format!("1-{}", sizes.len())).desired_width(110.0),
@@ -332,7 +391,7 @@ pub(crate) fn body(
             // Offered only when pages were picked before the dialog opened.
             if !d.selected.is_empty() {
                 let label = format!("{} ({})", tl!("Selected pages"), d.selected.len());
-                widgets::radio_value(ui, &mut d.which, Which::Selected, label);
+                red_radio_value(ui, &mut d.which, Which::Selected, &label);
             }
             ui.horizontal(|ui| {
                 ui.label(tl!("More options:"));
@@ -344,7 +403,7 @@ pub(crate) fn body(
                     &[(Subset::All, tl!("All pages in range")), (Subset::Odd, tl!("Odd pages only")), (Subset::Even, tl!("Even pages only"))],
                     150.0,
                 );
-                ui.add(widgets::checkbox(&mut d.reverse, tl!("Reverse pages")));
+                red_check(ui, &mut d.reverse, &tl!("Reverse pages"));
             });
             ui.add_space(6.0);
             soft_heading(ui, t, tl!("Page Sizing & Handling"));
@@ -372,13 +431,13 @@ pub(crate) fn body(
             match d.handling {
                 Handling::Size => {
                     ui.horizontal(|ui| {
-                        widgets::radio_value(ui, &mut d.size, SizeMode::Fit, tl!("Fit"));
-                        widgets::radio_value(ui, &mut d.size, SizeMode::Actual, tl!("Actual size"));
-                        widgets::radio_value(ui, &mut d.size, SizeMode::Shrink, tl!("Shrink oversized pages"));
+                        red_radio_value(ui, &mut d.size, SizeMode::Fit, &tl!("Fit"));
+                        red_radio_value(ui, &mut d.size, SizeMode::Actual, &tl!("Actual size"));
+                        red_radio_value(ui, &mut d.size, SizeMode::Shrink, &tl!("Shrink oversized pages"));
                     });
                     ui.horizontal(|ui| {
                         let custom = matches!(d.size, SizeMode::Custom(_));
-                        if ui.add(widgets::radio(custom, tl!("Custom scale:"))).clicked() {
+                        if red_radio(ui, custom, &tl!("Custom scale:")).clicked() {
                             d.size = SizeMode::Custom(d.custom_scale);
                         }
                         ui.add_enabled(custom, egui::DragValue::new(&mut d.custom_scale).range(1.0..=1000.0).suffix(" %"))
@@ -386,7 +445,7 @@ pub(crate) fn body(
                     });
                 }
                 Handling::Label => {
-                    ui.add(widgets::checkbox(&mut d.label_flip, tl!("Turn upside down (180°)")));
+                    red_check(ui, &mut d.label_flip, &tl!("Turn upside down (180°)"));
                     ui.label(
                         egui::RichText::new(tl!("Cuts each page to its printed area, turns it upright and fits it to the sheet without stretching. One label per sheet."))
                             .small()
@@ -399,7 +458,7 @@ pub(crate) fn body(
                         ui.add(egui::DragValue::new(&mut d.poster_scale).range(10.0..=1000.0).suffix(" %")).labelled_by(scale_label.id);
                         let overlap_label = ui.label(tl!("Overlap:"));
                         ui.add(egui::DragValue::new(&mut d.overlap).range(0.0..=144.0).suffix(" pt")).labelled_by(overlap_label.id);
-                        ui.add(widgets::checkbox(&mut d.cut_marks, tl!("Cut marks")));
+                        red_check(ui, &mut d.cut_marks, &tl!("Cut marks"));
                     });
                 }
                 Handling::Multiple => {
@@ -422,7 +481,7 @@ pub(crate) fn body(
                             150.0,
                         );
                     });
-                    ui.add(widgets::checkbox(&mut d.border, tl!("Print page border")));
+                    red_check(ui, &mut d.border, &tl!("Print page border"));
                     if d.order == PageOrder::CutStack {
                         ui.label(tl!(
                             "Print single-sided. Keep the sheets in order, cut at the marks, then stack the piles left to right, top to bottom."
@@ -465,7 +524,7 @@ pub(crate) fn body(
             );
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.add(widgets::checkbox(&mut d.as_image, tl!("Print as image")));
+                red_check(ui, &mut d.as_image, &tl!("Print as image"));
                 ui.add_enabled_ui(d.as_image, |ui| {
                     ui.label(tl!("Resolution:"));
                     let mut dpi = d.dpi.round() as u32;

@@ -1491,8 +1491,8 @@ fn typing_in_one_tab_never_reaches_another_tabs_added_text() {
     assert_eq!(h.state().views[1].content.draft.as_ref().map(|d| d.text.as_str()), Some("Reviewed"), "the other tab's typing stays out");
 }
 
-/// The page and zoom fields sit in the mode bar, immediately left of Print, and match each other
-/// so neither box is clipped by the window edge.
+/// The page and zoom fields sit in the mode bar, left of Print, and match each other so neither
+/// box is clipped by the window edge. Search, Save and document info stay between them and Print.
 #[test]
 fn page_and_zoom_fields_sit_beside_print() {
     let mut h = harness();
