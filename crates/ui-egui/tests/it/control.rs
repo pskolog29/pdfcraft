@@ -202,8 +202,8 @@ fn control_focus_traverses_real_widgets_and_keyboard_activates() {
     assert!(focused(&convert, "Convert"), "{convert}");
     assert!(convert["widgets"].as_array().unwrap().iter().any(|w| w["label"] == "Convert" && w["focusable"] == true));
     ok(&mut h, &c, "ui.key", json!({"key": "Tab"}));
-    let sign = ok(&mut h, &c, "ui.inspect", json!({"query": "E-Sign", "role": "Button"}));
-    assert!(focused(&sign, "E-Sign"), "{sign}");
+    let moved = ok(&mut h, &c, "ui.inspect", json!({"focused": true}));
+    assert!(!focused(&moved, "Convert"), "Tab leaves Convert: {moved}");
     ok(&mut h, &c, "ui.key", json!({"key": "Tab", "modifiers": ["shift"]}));
     let convert = ok(&mut h, &c, "ui.inspect", json!({"query": "Convert", "role": "Button"}));
     assert!(focused(&convert, "Convert"), "{convert}");
@@ -241,8 +241,11 @@ fn production_key_release_survives_the_focus_change_its_press_causes() {
     ok(&mut h, &c, "ui.focus", json!({"label": "Convert"}));
     let reply = call_production(&mut h, &c, "ui.key", json!({"key": "Tab"}));
     reply.unwrap_or_else(|e| panic!("a Tab press that moves focus must not leave its release unapplied: {e}"));
-    let sign = ok(&mut h, &c, "ui.inspect", json!({"query": "E-Sign", "role": "Button"}));
-    assert!(sign["widgets"].as_array().unwrap().iter().any(|w| w["label"] == "E-Sign" && w["focused"] == true), "focus moved on the press: {sign}");
+    let moved = ok(&mut h, &c, "ui.inspect", json!({"focused": true}));
+    assert!(
+        moved["widgets"].as_array().unwrap().iter().any(|w| w["focused"] == true && w["label"] != "Convert"),
+        "focus moved on the press: {moved}"
+    );
     assert!(!h.ctx.input(|i| i.keys_down.contains(&egui::Key::Tab)), "the release reached egui: no stuck Tab");
 }
 
@@ -267,7 +270,7 @@ fn control_button_focus_preserves_document_undo_redo_shortcuts() {
     let (mut h, c) = harness_pages(2);
     ok(&mut h, &c, "ui.focus", json!({"label": "Convert"}));
     ok(&mut h, &c, "ui.key", json!({"key": "Enter"}));
-    ok(&mut h, &c, "ui.click", json!({"label": "All tools"}));
+    ok(&mut h, &c, "ui.set", json!({"key": "mode", "value": "all"}));
     assert!(h.ctx.egui_wants_keyboard_input());
     assert!(!h.ctx.text_edit_focused());
     ok(&mut h, &c, "ui.command", json!({"id": "page.insert_blank"}));
@@ -543,7 +546,7 @@ fn language_switch_preserves_document_and_command_ids() {
         assert_eq!(ok(&mut h, &c, "ui.commands", json!({})), commands);
 
         let lang = i18n::Lang::from_code(code).unwrap();
-        // A title without an ASCII letter shows its mnemonic after it ("ファイル(F)").
+        // The top titles stay visible. Open File to see Open….
         let file = i18n::tr(lang, "File");
         h.get_by(|n| n.role() == egui::accesskit::Role::MenuItem && n.label().is_some_and(|l| l.starts_with(file))).click();
         h.run_steps(2);
@@ -971,7 +974,10 @@ fn japanese_controls_and_search_keep_command_ids() {
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["language"], "ja");
-    ok(&mut h, &c, "ui.click", json!({ "label": "変換" }));
+    // The Convert menu title shares this label, so the mode tab is clicked by id.
+    let tab = ok(&mut h, &c, "ui.inspect", json!({ "query": "変換", "role": "Button" }));
+    let id = tab["widgets"].as_array().unwrap().iter().find(|w| w["label"] == "変換" && w["clickable"] == true).expect("convert tab")["id"].clone();
+    ok(&mut h, &c, "ui.click", json!({ "id": id }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Convert");
 
     ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
@@ -991,7 +997,7 @@ fn japanese_controls_and_search_keep_command_ids() {
     }
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["documents"][0]["name"], "doc.pdf");
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "en" }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "All tools" }));
+    ok(&mut h, &c, "ui.set", json!({ "key": "mode", "value": "all" }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "AllTools");
 }
 
@@ -1002,7 +1008,10 @@ fn german_preferences_and_search_keep_command_ids() {
     }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "de" }));
-    ok(&mut h, &c, "ui.click", json!({ "label": "Konvertieren" }));
+    let tab = ok(&mut h, &c, "ui.inspect", json!({ "query": "Konvertieren", "role": "Button" }));
+    let id = tab["widgets"].as_array().unwrap().iter().find(|w| w["label"] == "Konvertieren" && w["clickable"] == true).expect("convert tab")["id"]
+        .clone();
+    ok(&mut h, &c, "ui.click", json!({ "id": id }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Convert");
     ok(&mut h, &c, "ui.command", json!({ "id": "app.preferences" }));
     h.run_steps(2);
@@ -1076,8 +1085,8 @@ fn preferences_menu_and_shortcut_allow_switching_interface_languages() {
     }
     let (mut h, c) = harness();
     ok(&mut h, &c, "ui.set", json!({ "key": "language", "value": "ja" }));
-    // The menu bar's Edit menu holds Preferences. Titles and rows carry their mnemonic
-    // ("編集(E)", "環境設定(P)…"), so match by the start of the label.
+    // Preferences sits in the Edit menu. Titles may carry a mnemonic ("編集(E)",
+    // "環境設定(P)…"), so match by the start of the label.
     let menu_row = |text: &'static str| {
         move |n: &egui_kittest::kittest::AccessKitNode<'_>| {
             n.role() == egui::accesskit::Role::MenuItem && n.label().is_some_and(|l| l.starts_with(text))
@@ -1233,19 +1242,27 @@ fn simplified_chinese_signature_prompts_and_errors_keep_document_state() {
 #[test]
 fn inspect_and_click_by_label_and_id() {
     let (mut h, c) = harness();
-    let found = ok(&mut h, &c, "ui.inspect", json!({ "query": "convert" }));
-    let convert =
-        found["widgets"].as_array().unwrap().iter().find(|w| w["label"] == "Convert" && w["clickable"] == true).cloned().expect("a Convert tab");
+    let found = ok(&mut h, &c, "ui.inspect", json!({ "query": "convert", "role": "Button" }));
+    let convert = found["widgets"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|w| w["label"] == "Convert" && w["role"] == "Button" && w["clickable"] == true)
+        .cloned()
+        .expect("a Convert tab");
     let rect = convert["rect"].as_array().unwrap();
     assert!(rect[2].as_f64().unwrap() > rect[0].as_f64().unwrap());
 
-    ok(&mut h, &c, "ui.click", json!({ "label": "Convert" }));
+    // The Convert menu title shares the label, so a bare label click is refused.
+    let err = call(&mut h, &c, "ui.click", json!({ "label": "Convert" })).unwrap_err();
+    assert!(err.contains("widgets are labelled"), "{err}");
+    ok(&mut h, &c, "ui.click", json!({ "id": convert["id"].clone() }));
     assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Convert");
 
-    let all = ok(&mut h, &c, "ui.inspect", json!({ "query": "all tools" }));
-    let id = all["widgets"].as_array().unwrap().iter().find(|w| w["label"] == "All tools" && w["clickable"] == true).unwrap()["id"].clone();
+    let edit = ok(&mut h, &c, "ui.inspect", json!({ "query": "Edit", "role": "Button" }));
+    let id = edit["widgets"].as_array().unwrap().iter().find(|w| w["label"] == "Edit" && w["clickable"] == true).unwrap()["id"].clone();
     ok(&mut h, &c, "ui.click", json!({ "id": id }));
-    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "AllTools");
+    assert_eq!(ok(&mut h, &c, "ui.state", json!({}))["mode"], "Edit");
 
     // Clicking a point works too (here: the Convert tab's centre).
     let [x0, y0, x1, y1] = [0, 1, 2, 3].map(|i| rect[i].as_f64().unwrap());

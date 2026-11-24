@@ -77,8 +77,13 @@ pub fn show(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 ui.set_width(ui.available_width());
                 let mut any = false;
                 for category in TOOL_CATEGORIES {
-                    let found: Vec<_> =
-                        category.groups.iter().filter_map(|id| catalog::group(id)).filter_map(|g| matches(&query, g).map(|m| (g, m))).collect();
+                    let found: Vec<_> = category
+                        .groups
+                        .iter()
+                        .filter(|id| !super::hidden_tool_group(id))
+                        .filter_map(|id| catalog::group(id))
+                        .filter_map(|g| matches(&query, g).map(|m| (g, m)))
+                        .collect();
                     if found.is_empty() {
                         continue;
                     }

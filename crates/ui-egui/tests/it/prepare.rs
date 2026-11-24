@@ -910,7 +910,7 @@ fn actions_tab_shows_a_chain_and_keeps_it_when_the_first_action_is_replaced() {
     };
     open(&mut h);
     h.get_by_label("Run a JavaScript, then 1 more action");
-    // The menu bar's Edit menu and the Edit tab come first; the rows' follow (Mouse Up, On Blur).
+    // The Edit menu title and the Edit mode tab come first; the rows follow (Mouse Up, On Blur).
     assert_eq!(h.get_all_by_label("Edit").count(), 4);
     h.get_all_by_label("Edit").nth(2).unwrap().click();
     h.run_steps(2);

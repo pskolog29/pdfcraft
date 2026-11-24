@@ -1,7 +1,7 @@
 use super::hooks::OsEvent;
 use super::state::{
-    Dialog, DocumentCopyJob, GridFile, LeftPanel, LinkOrigin, Mode, NumberDraft, PasswordPrompt, PendingLink, PropsTab, QuickTool, RecentFile,
-    RightPanel, UnlockPrompt,
+    Dialog, DocumentCopyJob, GridFile, LeftPanel, LinkOrigin, Mode, NumberDraft, PasswordPrompt, PropsTab, QuickTool, RecentFile, RightPanel,
+    UnlockPrompt,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use super::state::{OpenOutcome, OpenRequest, PendingRemoteLink};
@@ -42,7 +42,7 @@ impl PdfCraftApp {
         let mark = if dirty { " •" } else { "" };
         let titled = |name: Option<String>| {
             name.or_else(|| self.combine_showing().then(|| tl!("Combine files").to_owned()))
-                .map_or_else(|| "PdfCraft".to_owned(), |name| format!("{name}{mark} — PdfCraft"))
+                .map_or_else(|| crate::menus::APP_NAME.to_owned(), |name| format!("{name}{mark} — {}", crate::menus::APP_NAME))
         };
         let title = titled(self.active.and_then(|i| crate::canvas::tab_label(self, i)));
         // The web page's title is what an embedding host reads to tell which file opened, so it
@@ -273,6 +273,7 @@ impl PdfCraftApp {
             bookmark_rename: None,
             bookmark_clipboard: None,
             last_opened_url: None,
+            last_blocked_url: None,
             community_card_closed: false,
             pending_link: None,
             pending_full_screen: None,
@@ -706,6 +707,7 @@ impl eframe::App for PdfCraftApp {
         }
         chrome::tab_strip(self, ui);
         chrome::mode_bar(self, ui);
+        self.tool_strip(ui);
         // Whichever way another tab came to the front, it shows instead of the expanded view.
         if self.all_tools_full && self.all_tools_tab != self.shown_tab() {
             self.all_tools_full = false;

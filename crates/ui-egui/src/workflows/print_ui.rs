@@ -18,8 +18,8 @@ pub(crate) use body::body;
 pub use draft::{Handling, PrintDraft, Which};
 
 /// The preview pane, and the paper inside it (12 pt inset on each side).
-const PREVIEW_W: f32 = 320.0;
-const PREVIEW_H: f32 = 380.0;
+const PREVIEW_W: f32 = 280.0;
+const PREVIEW_H: f32 = 360.0;
 const PREVIEW_INSET: f32 = 12.0;
 pub(crate) const PREVIEW_BOX: (f32, f32) = (PREVIEW_W - 2.0 * PREVIEW_INSET, PREVIEW_H - 2.0 * PREVIEW_INSET);
 /// Label printing reads the printed area of at most this many pages (each is a quick render on

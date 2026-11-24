@@ -2,7 +2,7 @@
 //! right-hand panels (Comments, Bookmarks, Pages, Fields, Layers, Attachments).
 
 use egui::{Align, Align2, Color32, CornerRadius, Layout, Rect, Sense, Stroke, pos2, vec2};
-use pdfcraft_engine::catalog::{self, Availability, TOOL_GROUPS, ToolGroup, ToolItem};
+use pdfcraft_engine::catalog::{self, Availability, ToolGroup, ToolItem};
 use pdfcraft_render::{DocInfo, FieldKind, OutlineItem};
 
 use crate::theme::{self, Tokens};
@@ -25,7 +25,13 @@ pub use bookmarks::BmAction;
 pub(crate) use bookmarks::ellipsized_prefix;
 pub use right::right_panel;
 pub use tools::left_panel;
-pub(crate) use tools::panel_header;
+pub(crate) use tools::{export_badge, panel_header};
+
+/// Form filling and the accessibility checker stay out of the tool lists. Their commands still run
+/// when something else asks for them, so a document that already has fields can still be edited.
+pub(super) fn hidden_tool_group(id: &str) -> bool {
+    matches!(id, "form" | "fill_sign" | "accessibility")
+}
 
 // ───────────────────────────────────────────────────────────────────────────── right panels
 

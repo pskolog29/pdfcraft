@@ -98,9 +98,9 @@ impl PdfCraftApp {
     pub fn request_document_url(&mut self, url: &str, origin: LinkOrigin) {
         match pdfcraft_engine::links::document_url(url) {
             Ok(url) => {
-                if self.pending_link.is_none() && self.pending_remote_link.is_none() {
-                    self.pending_link = Some(PendingLink { url, origin });
-                }
+                // Documents may name a web or email address, but this copy never opens one.
+                self.last_blocked_url = Some(url);
+                self.notify_fmt("{who} tried to open a web link. Web links in documents stay closed.", &[("who", tl!(origin.noun()))]);
             }
             Err(e) => {
                 use pdfcraft_engine::links::BlockedLink;

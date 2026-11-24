@@ -69,11 +69,8 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     app.active = None;
                     app.combine_tab.focused = false;
                 }
-                // Reserve the three icon buttons, Discord and their gaps outside the scrolling tabs.
-                let controls_width = ui.fonts_mut(|f| f.layout_no_wrap("Discord".into(), theme::medium(13.0), t.text).size().x)
-                    + 3.0 * button
-                    + 54.0
-                    + window_controls::width(&controls.right);
+                // Reserve the icon buttons and their gaps outside the scrolling tabs.
+                let controls_width = 3.0 * button + 28.0 + window_controls::width(&controls.right);
                 // Open stays in sight after the tabs: its icon, text and padding, and the gaps around it.
                 let open_width = ui.fonts_mut(|f| f.layout_no_wrap(tl!("Open").into(), theme::medium(13.0), t.text).size().x) + 38.0 + 12.0;
                 let mut tabs_width = (ui.available_width() - controls_width - open_width).max(0.0);
@@ -309,10 +306,6 @@ pub fn tab_strip(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     if icons::button(ui, "circle-help", button, false, tl!("Keyboard shortcuts")).clicked() {
                         app.dialog = Some(Dialog::Shortcuts);
                     }
-                    // One click to the community, from anywhere in the app.
-                    if widgets::ghost_button_sized(ui, "messages-square", "Discord", tab_h).on_hover_text(pdfcraft_engine::links::DISCORD).clicked() {
-                        app.execute("help.discord");
-                    }
                 });
             });
         });
@@ -492,9 +485,9 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.painter().vline(ui.cursor().left(), ui.max_rect().y_range().shrink(12.0), Stroke::new(1.0, t.divider));
                     ui.add_space(10.0);
                 }
-                // Acrobat's mode bar has no Read tab: reading is what the viewer does with no tool
-                // in use. Read mode (the panes hidden) stays a View command and a default workspace.
-                for (mode, label) in [(Mode::AllTools, "All tools"), (Mode::Edit, "Edit"), (Mode::Convert, "Convert"), (Mode::Sign, "E-Sign")] {
+                // All tools, Read and E-Sign stay workspaces. They are not top-bar tabs. Read mode
+                // stays a View command.
+                for (mode, label) in [(Mode::Edit, "Edit"), (Mode::Convert, "Convert")] {
                     if widgets::mode_tab(ui, tl!(label), app.mode == mode).clicked() {
                         app.switch_mode(mode, true);
                     }
@@ -502,6 +495,8 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     let has_doc = app.active.is_some();
+                    // Rightmost first: Print, then Save and document info, then search. Page and
+                    // zoom stay on this bar, to the left of that group.
                     ui.add_enabled_ui(has_doc, |ui| {
                         let tip = crate::commands::command_tip(ui.ctx(), tl!("Print ({key})"), "print.dialog");
                         // A document that forbids printing says so here, before the dialog (#2669).
@@ -513,6 +508,8 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                         if print.clicked() {
                             app.run_command("print.dialog");
                         }
+                    });
+                    ui.add_enabled_ui(has_doc, |ui| {
                         let tip = crate::commands::command_tip(ui.ctx(), tl!("Save ({key})"), "file.save");
                         if icons::button(ui, "save", 32.0, false, &tip).clicked() {
                             app.run_command("file.save");
@@ -525,6 +522,9 @@ pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     ui.add_space(8.0);
                     if widgets::search_box(ui, tl!("Find tools and commands"), 260.0).clicked() {
                         app.palette_open = true;
+                    }
+                    if has_doc {
+                        top_page_zoom(app, ui);
                     }
                 });
             });
@@ -551,23 +551,105 @@ fn rail_field(ui: &mut egui::Ui, t: &Tokens, edit: egui::TextEdit<'_>) -> egui::
         .inner
 }
 
-/// Draw the right tool rail with page navigation, history, zoom, rotation and page-display controls for the
-/// active view.
+/// Page number, page step and zoom, in the mode bar beside Print.
+fn top_page_zoom(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
+    let Some(index) = app.active else { return };
+    let Some(id) = app.views.get(index).map(|v| v.id) else { return };
+    let packed = app.session.get(id).map(|doc| {
+        let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
+        (doc.info.pages.len(), labels)
+    });
+    let Some((page_count, labels)) = packed else { return };
+    let t = Tokens::get(ui.ctx());
+    let view = &mut app.views[index];
+    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        if icons::button(ui, "chevron-left", 28.0, false, tl!("Previous page")).clicked() {
+            view.step_page(false);
+        }
+        let page_input_id = view.page_input_id();
+        let reselect = std::mem::take(&mut view.page_input_reselect);
+        if !ui.memory(|m| m.has_focus(page_input_id)) {
+            view.page_input = view.current_page_label(labels.get(view.current).map(String::as_str));
+        } else if reselect {
+            let mut state = egui::TextEdit::load_state(ui.ctx(), page_input_id).unwrap_or_default();
+            let end = egui::text::CCursor::new(view.page_input.chars().count());
+            state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), end)));
+            state.store(ui.ctx(), page_input_id);
+        }
+        let edit = egui::TextEdit::singleline(&mut view.page_input)
+            .id(page_input_id)
+            .align(egui::Align2::CENTER_CENTER)
+            .font(theme::medium(12.0))
+            .frame(egui::Frame::NONE)
+            .margin(RAIL_FIELD_MARGIN);
+        let shown = if view.current < page_count { view.current + 1 } else { page_count };
+        let position = page_position(view.current, page_count, labels.get(view.current).map_or("", String::as_str));
+        let hover = if position.contains('/') {
+            position
+        } else {
+            crate::i18n::fmt(tl!("Page {p} of {n}"), &[("p", &shown.to_string()), ("n", &page_count.to_string())])
+        };
+        let r = rail_field(ui, &t, edit).on_hover_text(hover).accessible_name(tl!("Current page"));
+        if r.lost_focus() {
+            if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                let typed = view.page_input.clone();
+                view.go_to_typed(&typed, &labels);
+            }
+            view.page_input = view.current_page_label(labels.get(view.current).map(String::as_str));
+        }
+        if icons::button(ui, "chevron-right", 28.0, false, tl!("Next page")).clicked() {
+            view.step_page(true);
+        }
+        ui.add_space(6.0);
+        let tip = crate::commands::key_tip(ui.ctx(), tl!("Zoom out ({key})"), crate::commands::ZOOM_OUT);
+        if icons::button(ui, "zoom-out", 28.0, false, &tip).clicked() {
+            view.zoom_step(false);
+        }
+        let id = egui::Id::unique("zoom-input");
+        let draft = id.with("draft");
+        let mut typed = ui.data(|d| d.get_temp::<String>(draft)).unwrap_or_else(|| format!("{:.0}%", view.zoom * 100.0));
+        let edit = egui::TextEdit::singleline(&mut typed)
+            .id(id)
+            .align(egui::Align2::CENTER_CENTER)
+            .font(theme::medium(12.0))
+            .text_color(t.text)
+            .frame(egui::Frame::NONE)
+            .margin(RAIL_FIELD_MARGIN);
+        let r = rail_field(ui, &t, edit).on_hover_text(tl!("Zoom — type a percentage and press Enter"));
+        ui.ctx().accesskit_node_builder(id, |node| node.set_label(tl!("Zoom")));
+        if r.gained_focus() {
+            let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
+            let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(typed.chars().count()));
+            state.cursor.set_char_range(Some(all));
+            state.store(ui.ctx(), id);
+        }
+        if r.has_focus() {
+            ui.data_mut(|d| d.insert_temp(draft, typed.clone()));
+        } else {
+            ui.data_mut(|d| d.remove::<String>(draft));
+            if r.lost_focus()
+                && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                && let Some(zoom) = DocView::parse_zoom_percent(&typed)
+            {
+                view.set_zoom(zoom);
+            }
+        }
+        let tip = crate::commands::key_tip(ui.ctx(), tl!("Zoom in ({key})"), crate::commands::ZOOM_IN);
+        if icons::button(ui, "zoom-in", 28.0, false, &tip).clicked() {
+            view.zoom_step(true);
+        }
+    });
+}
+
+/// Draw the right tool rail with history, rotation and page-display controls for the active view.
 pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let Some((index, id)) = app.active_ids() else { return };
     let Some(doc) = app.session.get(id) else { return };
     let has_signatures = doc.is_signed();
-    let has_check = app.a11y.report.as_ref().is_some_and(|(d, _)| *d == id);
-    let (has_comments, has_outline, has_fields, has_layers, has_files) = (
-        !doc.info.annotations.is_empty(),
-        !doc.info.outline.is_empty(),
-        !doc.info.fields.is_empty(),
-        !doc.info.layers.is_empty(),
-        !doc.info.attachments.is_empty(),
-    );
-    let page_count = doc.info.pages.len();
-    let labels: Vec<String> = doc.info.pages.iter().map(|p| p.label.clone()).collect();
+    let (has_comments, has_outline, has_layers, has_files) =
+        (!doc.info.annotations.is_empty(), !doc.info.outline.is_empty(), !doc.info.layers.is_empty(), !doc.info.attachments.is_empty());
     let item = |panel: RightPanel, icon: &str, label: &str, marker: Option<&str>| {
         let item = RailItem::new(panel, icons::source(icon), tl!(label)).marker(marker.is_some());
         match marker {
@@ -576,19 +658,15 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
         }
     };
     let has = |has: bool, label: &'static str| has.then_some(label);
-    let mut items = vec![
+    let items = vec![
         item(RightPanel::Comments, "message-square-text", "Comments", has(has_comments, "Has comments")),
         item(RightPanel::Bookmarks, "bookmark", "Bookmarks", has(has_outline, "Has bookmarks")),
         item(RightPanel::Pages, "files", "Page thumbnails", None),
-        item(RightPanel::Fields, "text-cursor-input", "Form fields", has(has_fields, "Has form fields")),
         item(RightPanel::Layers, "layers", "Layers", has(has_layers, "Has layers")),
         item(RightPanel::Attachments, "paperclip", "Attachments", has(has_files, "Has attachments")),
         item(RightPanel::Signatures, "signature", "Signatures", has(has_signatures, "Signed")),
+        item(RightPanel::Tags, "tag", "Tags", None),
     ];
-    if has_check {
-        items.push(item(RightPanel::Accessibility, "accessibility", "Accessibility Checker", None));
-    }
-    items.push(item(RightPanel::Tags, "tag", "Tags", None));
     let view = &mut app.views[index];
     let mut page_display = None;
     let rail = Rail::new(egui::Id::unique("rail"))
@@ -624,56 +702,6 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     view.fit = if view.fit == Fit::Width { Fit::Page } else { Fit::Width };
                     view.goto = Some((view.current, 0.0));
                 }
-                // Out and in side by side right under the zoom field, so they are found with it.
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    // Two buttons across the rail, each leaving a pixel to the rail's edge.
-                    let side = (ui.available_width() / 2.0).floor();
-                    let tip = crate::commands::key_tip(ui.ctx(), tl!("Zoom out ({key})"), crate::commands::ZOOM_OUT);
-                    if icons::button(ui, "zoom-out", side, false, &tip).clicked() {
-                        view.zoom_step(false);
-                    }
-                    let tip = crate::commands::key_tip(ui.ctx(), tl!("Zoom in ({key})"), crate::commands::ZOOM_IN);
-                    if icons::button(ui, "zoom-in", side, false, &tip).clicked() {
-                        view.zoom_step(true);
-                    }
-                });
-                let id = egui::Id::unique("zoom-input");
-                let draft = id.with("draft");
-                let mut typed = ui.data(|d| d.get_temp::<String>(draft)).unwrap_or_else(|| format!("{:.0}%", view.zoom * 100.0));
-                let edit = egui::TextEdit::singleline(&mut typed)
-                    .id(id)
-                    .align(egui::Align2::CENTER_CENTER)
-                    .font(theme::medium(12.0))
-                    .text_color(t.text)
-                    .frame(egui::Frame::NONE)
-                    .margin(RAIL_FIELD_MARGIN);
-                let r = rail_field(ui, &t, edit).on_hover_text(tl!("Zoom — type a percentage and press Enter"));
-                ui.ctx().accesskit_node_builder(id, |node| node.set_label(tl!("Zoom")));
-                if r.gained_focus() {
-                    let mut state = egui::TextEdit::load_state(ui.ctx(), id).unwrap_or_default();
-                    let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(typed.chars().count()));
-                    state.cursor.set_char_range(Some(all));
-                    state.store(ui.ctx(), id);
-                }
-                if r.has_focus() {
-                    ui.data_mut(|d| d.insert_temp(draft, typed.clone()));
-                } else {
-                    ui.data_mut(|d| d.remove::<String>(draft));
-                    if r.lost_focus()
-                        && ui.input(|i| i.key_pressed(egui::Key::Enter))
-                        && let Some(zoom) = DocView::parse_zoom_percent(&typed)
-                    {
-                        view.set_zoom(zoom);
-                    }
-                }
-                ui.add_space(6.0);
-                if icons::button(ui, "chevron-down", 30.0, false, tl!("Next page")).clicked() {
-                    view.step_page(true);
-                }
-                if icons::button(ui, "chevron-up", 30.0, false, tl!("Previous page")).clicked() {
-                    view.step_page(false);
-                }
                 // History is distinct from stepping to the adjacent page, and belongs to this tab.
                 for (forward, icon, label, shortcut, enabled) in [
                     (true, "chevron-right", tl!("Next view"), crate::commands::NEXT_VIEW, !view.forward.is_empty()),
@@ -683,45 +711,6 @@ pub fn right_rail(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
                     if ui.add_enabled_ui(enabled, |ui| icons::button(ui, icon, 30.0, false, &tip)).inner.clicked() {
                         view.view_history(forward);
                     }
-                }
-                let font = theme::regular(11.0);
-                let mut position = page_position(view.current, page_count, labels.get(view.current).map_or("", String::as_str));
-                if widgets::text_width(ui, &position, &font) > ui.available_width() {
-                    position = page_count.to_string();
-                }
-                // Out of range (an empty document), like `page_position`: "Page 0 of 0", never past the end.
-                let shown = if view.current < page_count { view.current + 1 } else { page_count };
-                let of = crate::i18n::fmt(tl!("Page {p} of {n}"), &[("p", &shown.to_string()), ("n", &page_count.to_string())]);
-                ui.label(egui::RichText::new(position).font(font).color(t.text_muted)).on_hover_text(of);
-                let page_input_id = view.page_input_id();
-                // Consume replacement selection once, including when the editor has lost focus.
-                let reselect = std::mem::take(&mut view.page_input_reselect);
-                // Navigation updates the idle display, never the text being edited.
-                if !ui.memory(|m| m.has_focus(page_input_id)) {
-                    view.page_input = view.current_page_label(labels.get(view.current).map(String::as_str));
-                } else if reselect {
-                    // The replacement changed the label while egui retained this editor's cursor.
-                    let mut state = egui::TextEdit::load_state(ui.ctx(), page_input_id).unwrap_or_default();
-                    let end = egui::text::CCursor::new(view.page_input.chars().count());
-                    state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), end)));
-                    state.store(ui.ctx(), page_input_id);
-                }
-                let edit = egui::TextEdit::singleline(&mut view.page_input)
-                    .id(page_input_id)
-                    .align(egui::Align2::CENTER_CENTER)
-                    .font(theme::medium(12.0))
-                    .frame(egui::Frame::NONE)
-                    .margin(RAIL_FIELD_MARGIN);
-                let r = rail_field(ui, &t, edit)
-                    .on_hover_text(tl!("Current page — type a page number or label (such as iv) and press Enter"))
-                    .accessible_name(tl!("Current page"));
-                if r.lost_focus() {
-                    if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        // A page label first (logical page numbers, as Acrobat), then a number.
-                        let typed = view.page_input.clone();
-                        view.go_to_typed(&typed, &labels);
-                    }
-                    view.page_input = view.current_page_label(labels.get(view.current).map(String::as_str));
                 }
             });
         });

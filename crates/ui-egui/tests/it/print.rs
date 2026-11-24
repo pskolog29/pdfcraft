@@ -100,7 +100,7 @@ fn print_dialog_lays_out_sheets_and_saves_a_pdf() {
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
     assert_eq!(h.state().dialog, Some(Dialog::Print));
-    h.get_by_label("Pages to Print".to_uppercase().as_str());
+    h.get_by_label("Pages to Print");
     h.get_by_label("Sheet 1 of 1");
     // Two copies of the one page, as a 2-up poster-free layout: Multiple.
     h.get_by_label("Multiple").click();
@@ -459,7 +459,7 @@ fn print_as_image_is_an_advanced_choice_that_saves_pictures() {
     let mut h = harness();
     assert!(h.state_mut().execute("print.dialog"));
     h.run_steps(3);
-    h.get_by_label("Advanced".to_uppercase().as_str()).click();
+    h.get_by_label("Advanced");
     h.run_steps(2);
     h.get_by_label("Print as image").click();
     h.run_steps(2);

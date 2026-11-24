@@ -42,6 +42,23 @@ include!(concat!(env!("OUT_DIR"), "/craft_i18n.rs"));
 
 /// The embedded catalogs, offering exactly the languages in [`LANGUAGES`]. Built on first use; a
 /// locale is parsed on its first lookup.
+/// Set by the desktop app. Tests leave it off, so their English labels stay English.
+static PRODUCT_TURKISH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn on the built-in Turkish phrases and keep this copy off the network (no update check).
+pub fn enable_product_turkish() {
+    PRODUCT_TURKISH.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether [`enable_product_turkish`] is on. The desktop app uses it to skip update checks.
+pub(crate) fn product_offline() -> bool {
+    PRODUCT_TURKISH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn product_turkish() -> bool {
+    product_offline()
+}
+
 static I18N: LazyLock<I18n> = LazyLock::new(|| {
     let offered: Vec<&str> = LANGUAGES.iter().map(|l| l.code).collect();
     let (i18n, problems) = I18n::new(CRAFT_I18N, &offered);
@@ -497,7 +514,8 @@ pub fn in_sentence(label: &str) -> std::borrow::Cow<'_, str> {
 pub fn upper_label(english: &str) -> String {
     let lang = current();
     let shown = tr(lang, english);
-    if lang.code() == "tr" && has(lang, english) { shown.chars().flat_map(upper_turkish).collect() } else { shown.to_uppercase() }
+    let turkish = product_turkish() || (lang.code() == "tr" && has(lang, english));
+    if turkish { shown.chars().flat_map(upper_turkish).collect() } else { shown.to_uppercase() }
 }
 
 fn upper_turkish(c: char) -> std::char::ToUppercase {
@@ -540,6 +558,11 @@ pub fn key_name(s: &str) -> &str {
 
 /// Translate an English UI string; unknown strings come back unchanged.
 pub fn tr(lang: Lang, s: &str) -> &str {
+    if product_turkish()
+        && let Some(phrase) = tr_overlay::phrase(s)
+    {
+        return phrase;
+    }
     lang.i18n().t(lang.lang, s)
 }
 
@@ -556,6 +579,11 @@ pub fn words(wording: &str) -> String {
 
 /// Like [`tr`], for an English string that needs a disambiguating `context`.
 pub fn tr_ctx<'a>(lang: Lang, context: &str, s: &'a str) -> &'a str {
+    if product_turkish()
+        && let Some(phrase) = tr_overlay::phrase(s)
+    {
+        return phrase;
+    }
     lang.i18n().tc(lang.lang, context, s)
 }
 
@@ -618,6 +646,10 @@ pub fn fmt(template: &str, args: &[(&str, &str)]) -> String {
 /// A generated history label (the action part of "Undo …") in the current language. Captured
 /// values (file and field names) are inserted as they are; unknown labels are looked up whole.
 pub fn action_label(text: &str) -> String {
+    // An exact phrase wins over the prefix guess, so "Import bookmarks" is not read as a file name.
+    if product_turkish() && tr_overlay::phrase(text).is_some() {
+        return t(text).to_owned();
+    }
     for (prefix, template) in [
         ("Insert pages from ", "Insert pages from {name}"),
         ("Fill in ", "Fill in {name}"),
@@ -662,7 +694,9 @@ pub fn command_label(text: &str) -> String {
     for (prefix, template) in [("Undo", "Undo {action}"), ("Redo", "Redo {action}")] {
         if let Some(action) = text.strip_prefix(prefix).and_then(|tail| tail.strip_prefix(' ')) {
             let action = action_label(action);
-            if has(current(), "Undo {action}") && has(current(), "Redo {action}") {
+            let paired = (has(current(), "Undo {action}") && has(current(), "Redo {action}"))
+                || (product_turkish() && tr_overlay::phrase("Undo {action}").is_some() && tr_overlay::phrase("Redo {action}").is_some());
+            if paired {
                 return fmt(t(template), &[("action", &action)]);
             }
             return format!("{} {action}", t(prefix));
@@ -686,6 +720,12 @@ pub fn menu_label(id: &str, label: &str) -> String {
 /// The form is the language's CLDR category; `{n}` is written in `0`–`9` without grouping or
 /// isolate marks, as PdfCraft always has.
 pub fn trn(lang: Lang, n: u64, one: &str, other: &str) -> String {
+    if product_turkish() {
+        let template = if n == 1 { one } else { other };
+        if let Some(phrase) = tr_overlay::phrase(template) {
+            return fmt(phrase, &[("n", &n.to_string())]);
+        }
+    }
     lang.i18n().trn_plain(lang.lang, n, one, other)
 }
 
@@ -730,6 +770,8 @@ pub(crate) fn needs_catalogs() -> bool {
     }
     catalogs_embedded()
 }
+
+mod tr_overlay;
 
 #[cfg(test)]
 mod tests;

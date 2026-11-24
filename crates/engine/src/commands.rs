@@ -405,12 +405,13 @@ pub const COMMANDS: &[CommandSpec] = &[
     c("page.number", "Number pages…", PAGES, None, Assembly, "hash"),
     c("page.properties", "Page properties…", PAGES, None, Modification, "info"),
     c("help.shortcuts", "Keyboard shortcuts", HELP, None, Nothing, "circle-help"),
-    c("help.discord", "Join the ArtCraft Discord", HELP, None, Nothing, "messages-square"),
-    c("help.app_page", "PdfCraft web page", HELP, None, Nothing, "globe"),
-    c("help.github", "PdfCraft on GitHub", HELP, None, Nothing, "code-xml"),
-    c("help.website", "ArtCraft website", HELP, None, Nothing, "external-link"),
-    c("help.check_updates", "Check for updates…", HELP, None, Nothing, "cloud"),
-    c("help.about", "About PdfCraft", HELP, None, Nothing, "info"),
+    // Kept as commands so older scripts still resolve, but not in the menu: this copy does not open the web.
+    c("help.discord", "Join the ArtCraft Discord", None, None, Nothing, "messages-square"),
+    c("help.app_page", "PdfCraft web page", None, None, Nothing, "globe"),
+    c("help.github", "PdfCraft on GitHub", None, None, Nothing, "code-xml"),
+    c("help.website", "ArtCraft website", None, None, Nothing, "external-link"),
+    c("help.check_updates", "Check for updates…", None, None, Nothing, "cloud"),
+    c("help.about", "About Arif Pdf", HELP, None, Nothing, "info"),
 ];
 
 pub fn command(id: &str) -> Option<&'static CommandSpec> {

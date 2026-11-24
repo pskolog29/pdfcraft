@@ -218,9 +218,7 @@ impl PdfCraftApp {
                 }
             }
             link if pdfcraft_engine::links::for_command(link).is_some() => {
-                if let Some(l) = pdfcraft_engine::links::for_command(link) {
-                    self.open_url(l.url);
-                }
+                self.notify_tr("Web links stay closed in this copy.");
             }
             "app.preferences" => self.dialog = Some(Dialog::Preferences),
             "protect.remove_hidden" => self.open_remove_hidden(),

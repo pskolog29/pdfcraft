@@ -2,10 +2,10 @@
 # Regenerate the app icons from assets/app-icon/pdfcraft.svg and the Windows PDF file icon
 # from assets/app-icon/pdfcraft-document.svg. Both are master vectors.
 #
-# Needs: resvg (brew install resvg / cargo install resvg) and python3 (stdlib only, for the .ico).
-# On macOS, iconutil also writes the .icns. The outputs are committed, so building and packaging
-# never need these tools. After running it, update the sha256 values in ATTRIBUTION.toml, then
-# `cargo xtask assets --write`.
+# Needs: resvg (brew install resvg / cargo install resvg) or rsvg-convert, and python3 (stdlib
+# only, for the .ico and, without iconutil, the .icns). On macOS, iconutil writes the .icns.
+# The outputs are committed, so building and packaging never need these tools. After running it,
+# update the sha256 values in ATTRIBUTION.toml, then `cargo xtask assets --write`.
 #
 #   packaging/icons.sh
 set -euo pipefail
@@ -16,7 +16,10 @@ ID="ai.storyteller.pdfcraft"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-command -v resvg >/dev/null || { echo "error: resvg not found (brew install resvg)" >&2; exit 1; }
+if ! command -v resvg >/dev/null && ! command -v rsvg-convert >/dev/null; then
+  echo "error: resvg or rsvg-convert not found (brew install resvg, or the librsvg rsvg-convert)" >&2
+  exit 1
+fi
 
 # The master is a full-bleed 512 tile (rx=112): right for Windows and Linux. macOS icons follow
 # Apple's grid instead: an 824 px body centred on a transparent 1024 canvas.
@@ -29,7 +32,11 @@ MAC="$TMP/macos.svg"
 
 render() {
   local src="$1" size="$2" out="$3"
-  resvg -w "$size" -h "$size" "$src" "$out" </dev/null
+  if command -v resvg >/dev/null; then
+    resvg -w "$size" -h "$size" "$src" "$out" </dev/null
+  else
+    rsvg-convert -w "$size" -h "$size" -o "$out" "$src"
+  fi
 }
 
 # 1024 px PNG on Apple's grid (also the runtime Dock icon on macOS, see apps/pdfcraft/src/main.rs).
@@ -76,6 +83,27 @@ if command -v iconutil >/dev/null; then
   done
   iconutil -c icns -o "$DIR/pdfcraft.icns" "$SET"
 else
-  echo "warning: iconutil not found (macOS only); pdfcraft.icns not regenerated" >&2
+  # iconutil is macOS-only. A PNG-inside-icns is what current macOS reads, so Linux can
+  # still rebuild the bundle icon from the same master.
+  python3 - "$DIR/pdfcraft.icns" "$MAC" "$TMP" <<'PY'
+import shutil, struct, subprocess, sys
+out, mac, tmp = sys.argv[1:]
+# OSType and pixel size. The retina types repeat a size under the @2x code.
+slots = [
+    ("ic07", 128), ("ic08", 256), ("ic09", 512), ("ic10", 1024),
+    ("ic11", 32), ("ic12", 64), ("ic13", 256), ("ic14", 512),
+]
+resvg = shutil.which("resvg")
+chunks = []
+for typ, size in slots:
+    png = f"{tmp}/icns-{typ}-{size}.png"
+    if resvg:
+        subprocess.check_call([resvg, "-w", str(size), "-h", str(size), mac, png], stdin=subprocess.DEVNULL)
+    else:
+        subprocess.check_call(["rsvg-convert", "-w", str(size), "-h", str(size), "-o", png, mac])
+    chunks.append((typ.encode("ascii"), open(png, "rb").read()))
+body = b"".join(typ + struct.pack(">I", 8 + len(data)) + data for typ, data in chunks)
+open(out, "wb").write(b"icns" + struct.pack(">I", 8 + len(body)) + body)
+PY
 fi
 echo "icons written to $DIR"

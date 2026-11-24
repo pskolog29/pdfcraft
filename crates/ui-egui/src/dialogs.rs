@@ -130,7 +130,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let modal = widgets::show_modal(ctx, "dialog", |ui| {
         ui.set_width(match dialog {
             Dialog::Properties(_) => 640.0,
-            Dialog::Print => 820.0,
+            Dialog::Print => 920.0,
             Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
             Dialog::Preferences => 610.0,
             Dialog::About => 820.0,
@@ -1329,10 +1329,11 @@ fn dialog_print(ui: &mut egui::Ui, app: &mut PdfCraftApp, req: &mut Pending) -> 
         ui.ctx().pixels_per_point(),
         ui.ctx().input(|i| i.max_texture_side) as f32,
     );
+    let file_name = doc.name.clone();
     let view = &mut app.views[i];
     view.set_print_grayscale(app.print_draft.grayscale);
     view.queue_print_previews(&rasters);
-    let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &sizes, &labels, &mut |p| {
+    let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &file_name, &sizes, &labels, &mut |p| {
         view.need_thumbnail(p, true);
         view.page_preview(p)
     });
@@ -1551,7 +1552,7 @@ fn dialog_shortcuts(ui: &mut egui::Ui) -> bool {
 }
 
 /// `Dialog::About` content. Returns `false` when it has its own buttons and no footer is wanted.
-fn dialog_about(ui: &mut egui::Ui, req: &mut Pending) -> bool {
+fn dialog_about(ui: &mut egui::Ui, _req: &mut Pending) -> bool {
     let t = Tokens::get(ui.ctx());
     // Tabs About · Contributors · Models.
     let tab_id = egui::Id::unique("about_tab");
@@ -1570,31 +1571,17 @@ fn dialog_about(ui: &mut egui::Ui, req: &mut Pending) -> bool {
         1 => crate::credits::contributors_ui(ui),
         2 => crate::credits::models_ui(ui),
         _ => {
-            ui.horizontal(|ui| {
-                widgets::artcraft_mark(ui, 40.0);
-                ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("PdfCraft").font(theme::semibold(20.0)));
-                    ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", &pdfcraft_engine::build_info::version())]));
-                });
-            });
-            ui.add_space(6.0);
-            ui.label(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0."));
+            ui.label(egui::RichText::new(crate::menus::APP_NAME).font(theme::semibold(22.0)).color(t.text));
+            ui.add_space(2.0);
+            ui.label(crate::i18n::fmt(tl!("Version {v}"), &[("v", &pdfcraft_engine::build_info::version())]));
+            ui.add_space(10.0);
+            ui.label(tl!(
+                "Arif Pdf keeps your documents on this computer. Links inside files that would open a web page stay closed, and this copy does not open community or update pages."
+            ));
+            ui.add_space(8.0);
             ui.label(
-                egui::RichText::new(
-                    "Rendering: hayro (bootstrap) · UI: egui · Icons: Lucide (ISC) · Fonts: Inter, JetBrains Mono, Dancing Script (OFL)",
-                )
-                .color(t.text_muted)
-                .small(),
+                egui::RichText::new(tl!("A clean-room, open-source PDF application written in Rust. MIT OR Apache-2.0.")).color(t.text_muted).small(),
             );
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(tl!("Part of")).color(t.text_muted));
-                widgets::artcraft_logo(ui, 16.0);
-            });
-            ui.add_space(6.0);
-            if let Some(cmd) = widgets::community_links(ui) {
-                req.link_command = Some(cmd);
-            }
         }
     }
     true

@@ -2226,9 +2226,9 @@ fn switching_modes_keeps_the_current_page_at_fixed_zoom() {
     h.state_mut().views[0].go_to_page(5);
     h.run_steps(8);
     assert_eq!(h.state().views[0].current, 5);
-    h.get_by_label("All tools").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Edit").click();
     h.run_steps(8);
-    assert_eq!(h.state().views[0].current, 5, "switching to All tools should keep the current page");
+    assert_eq!(h.state().views[0].current, 5, "switching workspace should keep the current page");
     h.state_mut().open_bytes("other.pdf", None, other).unwrap();
     h.state_mut().set_option("zoom", "100").unwrap();
     h.run_steps(8);
@@ -2244,6 +2244,40 @@ fn switching_modes_keeps_the_current_page_at_fixed_zoom() {
 }
 
 #[test]
+fn the_tool_menus_open_a_horizontal_strip() {
+    use egui_kittest::kittest::Queryable;
+    let mut h = harness(&[]);
+    let menu_item = |label: &'static str| {
+        move |n: &egui_kittest::kittest::AccessKitNode<'_>| n.role() == egui::accesskit::Role::MenuItem && n.label().as_deref() == Some(label)
+    };
+    assert!(h.query_all_by(menu_item("File")).count() >= 1, "the titles stay in the top bar");
+    assert_eq!(h.query_all_by(menu_item("Sign")).count(), 0, "Sign is not a top menu");
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "E-Sign").is_none(), "E-Sign is not a top tab");
+    assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "tools stay hidden until the menu opens");
+    crate::support::open_menu(&mut h, "File");
+    let open = crate::support::menu_row(&h, "Open…").rect();
+    let save = crate::support::menu_row(&h, "Save").rect();
+    let file = h.get_by(menu_item("File")).rect();
+    assert!(save.top() > open.bottom() - 1.0, "File lists downward: {open:?} {save:?}");
+    assert!((save.left() - open.left()).abs() < 8.0, "File is a vertical menu");
+    assert!(open.top() + 1.0 >= file.bottom(), "the menu opens under its title: {file:?} {open:?}");
+    crate::support::open_menu(&mut h, "Edit");
+    let undo = crate::support::menu_row(&h, "Undo").rect();
+    let redo = crate::support::menu_row(&h, "Redo").rect();
+    let edit = h.get_by(menu_item("Edit")).rect();
+    assert!(redo.left() > undo.right() - 1.0, "Edit tools sit in a row: {undo:?} {redo:?}");
+    assert!((redo.top() - undo.top()).abs() < 8.0, "Edit is a horizontal strip");
+    assert!(undo.top() + 1.0 >= edit.bottom(), "the strip opens under the titles");
+    let viewport = h.state().views[0].viewport_rect();
+    assert!(viewport.top() + 1.0 >= undo.bottom(), "the page starts below the strip: {viewport:?} {undo:?}");
+    assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "opening Edit closes File");
+    crate::support::open_menu(&mut h, "Pages");
+    crate::support::menu_row(&h, "Delete pages");
+    crate::support::open_menu(&mut h, "Convert");
+    crate::support::menu_row(&h, "Export to Word…");
+}
+
+#[test]
 fn long_view_menu_fits_a_short_window() {
     use egui_kittest::kittest::Queryable;
     let mut h = Harness::builder().with_size(egui::vec2(1000.0, 400.0)).build_eframe(|_cc| {
@@ -2255,11 +2289,8 @@ fn long_view_menu_fits_a_short_window() {
     h.run_steps(8);
     crate::support::open_menu(&mut h, "View");
     h.run_steps(2);
-    crate::support::menu_row(&h, "Rotate view").hover();
-    h.event(wheel(MouseWheelUnit::Point, -1000.0, TouchPhase::Move));
-    h.run_steps(6);
     let after = crate::support::menu_row(&h, "Side panels").rect().bottom();
-    assert!(after <= 400.0, "the menu scrolls Side panels into view: {after}");
+    assert!(after <= 400.0, "Side panels stays inside the short window: {after}");
     crate::support::menu_row(&h, "Side panels").hover();
     h.run_steps(4);
     // The navigation rail has a Bookmarks button too; click the submenu's radio item.

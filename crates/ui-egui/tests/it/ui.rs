@@ -116,13 +116,19 @@ fn home_removes_one_recent_file_or_clears_them_all() {
 }
 
 #[test]
-fn every_catalog_tool_is_listed_after_view_more() {
-    let mut h = harness(|_| {});
-    h.get_by_label("View more").click();
-    h.run_steps(3);
-    for g in pdfcraft_engine::catalog::TOOL_GROUPS {
-        assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from All tools", g.label);
+fn every_catalog_tool_is_listed_in_the_sidebar() {
+    let h = harness(|_| {});
+    for c in pdfcraft_engine::catalog::TOOL_CATEGORIES {
+        assert!(h.query_all_by_label(c.label).count() >= 1, "category {} missing", c.label);
     }
+    for g in pdfcraft_engine::catalog::TOOL_GROUPS {
+        if matches!(g.id, "form" | "fill_sign" | "accessibility") {
+            assert!(h.query_by_label(g.label).is_none(), "tool {} stays out of the sidebar", g.label);
+        } else {
+            assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from All tools", g.label);
+        }
+    }
+    assert!(h.query_by_label("View more").is_none());
 }
 
 #[test]
@@ -135,7 +141,11 @@ fn expanded_all_tools_lists_every_tool_by_category_and_searches() {
         h.get_by_label(c.label);
     }
     for g in pdfcraft_engine::catalog::TOOL_GROUPS {
-        assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from the expanded view", g.label);
+        if matches!(g.id, "form" | "fill_sign" | "accessibility") {
+            assert!(h.query_by_label(g.label).is_none(), "tool {} stays out of the expanded view", g.label);
+        } else {
+            assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from the expanded view", g.label);
+        }
     }
     // An item name finds its tool; the other categories drop out.
     h.state_mut().all_tools_query = "rotate".into();
@@ -161,7 +171,7 @@ fn collapse_and_escape_close_the_expanded_all_tools() {
     h.get_by_label("Collapse all tools").click();
     h.run_steps(3);
     assert!(!h.state().all_tools_full);
-    h.get_by_label("View more");
+    h.get_by_label("Create & Edit");
     h.get_by_label("Expand all tools").click();
     h.run_steps(3);
     h.key_press(egui::Key::Escape);
@@ -402,15 +412,17 @@ fn read_mode_rail_buttons_open_their_panels() {
     h.get_by_label("Alpha section");
 }
 
-/// The mode bar matches Acrobat's: All tools, Edit, Convert and E-Sign, with no Read tab. Read
-/// mode is still a View command.
+/// The mode bar is Edit and Convert. All tools, Read and E-Sign are not tabs. Read mode is still
+/// a View command.
 #[test]
 fn the_mode_bar_has_no_read_tab() {
     use pdfcraft_ui_egui::Mode;
     let mut h = harness(|app| app.open_bytes("fixture.pdf", None, FIXTURE.to_vec()).expect("fixture opens"));
-    for label in ["All tools", "Edit", "Convert", "E-Sign"] {
-        assert!(h.query_all_by_label(label).next().is_some(), "the {label} tab is there");
+    for label in ["Edit", "Convert"] {
+        assert!(h.query_all_by_role_and_label(egui::accesskit::Role::Button, label).next().is_some(), "the {label} tab is there");
     }
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "All tools").is_none(), "no All tools tab");
+    assert!(h.query_by_role_and_label(egui::accesskit::Role::Button, "E-Sign").is_none(), "no E-Sign tab");
     assert!(h.query_all_by_label("Read").next().is_none(), "no Read tab");
     h.state_mut().run_command("view.read_mode");
     h.run_steps(2);
@@ -466,8 +478,9 @@ fn read_mode_closes_the_panes_and_leaving_it_brings_them_back() {
     h.run_steps(2);
     h.get_by_label("Page thumbnails").click();
     h.run_steps(2);
-    h.get_by_label("All tools").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Edit").click();
     h.run_steps(3);
+    assert_eq!(h.state().mode, Mode::Edit);
     assert_eq!(h.state().right, Some(RightPanel::Pages));
 }
 
@@ -522,10 +535,10 @@ fn a_pane_closed_in_read_mode_stays_closed_when_leaving_it() {
     h.run_steps(3);
     assert_eq!(h.state().right, None);
     assert!(h.state().comments_panel_closed);
-    // Leave Read mode through the toolbar.
-    h.get_by_label("All tools").click();
+    // Leave Read mode through a mode tab.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Edit").click();
     h.run_steps(3);
-    assert_eq!(h.state().mode, Mode::AllTools);
+    assert_eq!(h.state().mode, Mode::Edit);
     assert_eq!(h.state().right, None, "the pane closed in Read mode stays closed");
     assert!(h.state().comments_panel_closed);
     // The same through the Read mode command.
@@ -662,8 +675,8 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
         }
     });
     let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
-    assert!(open.right() <= discord.left(), "Open {open:?} must not run under Discord {discord:?}");
+    let shortcuts = h.get_by_label("Keyboard shortcuts").rect();
+    assert!(open.right() <= shortcuts.left(), "Open {open:?} must not run under Keyboard shortcuts {shortcuts:?}");
     let mut previous_right = f32::MIN;
     for i in 0..5 {
         let tab = h.get_by_label(&name(i)).rect();
@@ -687,15 +700,15 @@ fn tabs_shrink_to_fit_then_arrows_step_through_them_and_open_stays_in_sight() {
     assert_eq!(enabled(&h, "Scroll tabs right"), Some(true), "and then there is more to the right");
     let open = h.get_by_label("Open").rect();
     let right = h.get_by_label("Scroll tabs right").rect();
-    assert!(right.right() <= open.left() + 0.5 && open.right() <= h.get_by_label("Discord").rect().left());
-    // Twenty: Open stays in sight left of Discord.
+    assert!(right.right() <= open.left() + 0.5 && open.right() <= h.get_by_label("Keyboard shortcuts").rect().left());
+    // Twenty: Open stays in sight left of Keyboard shortcuts.
     for i in 0..13 {
         h.state_mut().open_bytes(&format!("more-{i:02}.pdf"), None, FIXTURE.to_vec()).unwrap();
     }
     h.run_steps(4);
     let open = h.get_by_label("Open").rect();
-    let discord = h.get_by_label("Discord").rect();
-    assert!(open.left() > 0.0 && open.right() <= discord.left(), "Open {open:?} stays in sight left of Discord {discord:?}");
+    let shortcuts = h.get_by_label("Keyboard shortcuts").rect();
+    assert!(open.left() > 0.0 && open.right() <= shortcuts.left(), "Open {open:?} stays in sight left of Keyboard shortcuts {shortcuts:?}");
 }
 
 /// macOS (#789): with the integrated title bar, the strip is the 28 pt band AppKit centres the
@@ -708,7 +721,7 @@ fn the_integrated_title_bar_is_the_traffic_light_band() {
         app.open_bytes("band.pdf", None, FIXTURE.to_vec()).unwrap();
     });
     let band = 28.0;
-    for label in ["Home", "band.pdf", "Open", "Discord", "Keyboard shortcuts"] {
+    for label in ["Home", "band.pdf", "Open", "Keyboard shortcuts"] {
         let r = h.get_by_label(label).rect();
         assert!(r.top() >= 0.0 && r.bottom() <= band, "{label}: {r:?} inside the {band} pt title bar");
         assert!(r.height() >= 24.0, "{label}: {r:?} stays clickable");
@@ -1711,15 +1724,15 @@ fn the_edit_tab_turns_on_edit_text_and_images() {
     h.run_steps(3);
     assert_eq!(h.state().mode, Mode::Edit);
     assert_eq!(h.state().quick_tool, QuickTool::EditText);
-    h.get_by_label("All tools").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Convert").click();
     h.run_steps(3);
-    assert_eq!(h.state().mode, Mode::AllTools);
+    assert_eq!(h.state().mode, Mode::Convert);
     assert_eq!(h.state().quick_tool, QuickTool::Select);
     // Another tool picked inside Edit is not taken away by leaving it.
     support::outside_menus(&h, "Edit").click();
     h.run_steps(3);
     h.state_mut().quick_tool = QuickTool::Hand;
-    h.get_by_label("Convert").click();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Convert").click();
     h.run_steps(3);
     assert_eq!(h.state().quick_tool, QuickTool::Hand);
 }

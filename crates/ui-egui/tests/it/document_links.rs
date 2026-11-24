@@ -1,11 +1,12 @@
-//! Addresses a document asks to open (links, button URI actions, `app.launchURL`) wait for the
-//! user's permission, and anything but a web or email address is refused (#90, #91).
+//! Addresses a document asks to open (links, button URI actions, `app.launchURL`) stay closed.
+//! Anything but a web or email address is still refused with its own notice (#90, #91). Local
+//! GoToR links keep their own confirmation.
 
 use crate::support;
 
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
-use pdfcraft_ui_egui::{LinkOrigin, PdfCraftApp, PendingLink};
+use pdfcraft_ui_egui::PdfCraftApp;
 
 use crate::gpu;
 
@@ -145,22 +146,17 @@ fn click_field(h: &mut Harness<'static, PdfCraftApp>, name: &str) {
     click_at(h, at);
 }
 
-fn pending(url: &str, origin: LinkOrigin) -> Option<PendingLink> {
-    Some(PendingLink { url: url.into(), origin })
-}
-
 #[test]
-fn a_link_asks_first_and_opens_when_allowed() {
+fn a_link_is_refused_without_opening() {
     let _gpu = gpu();
     let mut h = harness();
     click_link(&mut h);
-    assert_eq!(h.state().pending_link, pending(LINK_URL, LinkOrigin::Link));
-    assert_eq!(h.state().last_opened_url, None, "nothing opens before the user answers");
-    h.get_by_label("example.org");
-    h.get_by_label("Open link").click();
-    h.run_steps(3);
-    assert_eq!(h.state().last_opened_url.as_deref(), Some(LINK_URL));
     assert_eq!(h.state().pending_link, None);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some(LINK_URL));
+    assert_eq!(h.state().last_opened_url, None);
+    assert!(h.query_by_label("Open link").is_none());
+    let toast = h.state().toast.clone().expect("the user is told").0;
+    assert!(toast.contains("stay closed"), "{toast}");
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -263,35 +259,25 @@ fn unsupported_launch_action_is_reported_without_claiming_javascript() {
 }
 
 #[test]
-fn cancel_opens_nothing() {
+fn a_web_link_opens_nothing_and_needs_no_cancel() {
     let _gpu = gpu();
     let mut h = harness();
     click_link(&mut h);
-    assert!(h.state().pending_link.is_some());
-    h.get_by_label("Cancel").click();
-    h.run_steps(3);
     assert_eq!(h.state().pending_link, None);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some(LINK_URL));
     assert_eq!(h.state().last_opened_url, None);
-}
-
-#[test]
-fn escape_cancels() {
-    let _gpu = gpu();
-    let mut h = harness();
-    click_link(&mut h);
-    assert!(h.state().pending_link.is_some());
     h.key_press(egui::Key::Escape);
     h.run_steps(3);
-    assert_eq!(h.state().pending_link, None);
     assert_eq!(h.state().last_opened_url, None);
 }
 
 #[test]
-fn a_button_uri_action_asks_first() {
+fn a_button_uri_action_is_refused() {
     let _gpu = gpu();
     let mut h = harness();
     click_field(&mut h, "web");
-    assert_eq!(h.state().pending_link, pending(BUTTON_URL, LinkOrigin::Button));
+    assert_eq!(h.state().pending_link, None);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some(BUTTON_URL));
     assert_eq!(h.state().last_opened_url, None);
 }
 
@@ -314,8 +300,9 @@ fn a_script_asks_first_and_only_once() {
     let script = "app.launchURL('https://example.org/?q=' + 'first'); app.launchURL('https://example.org/second');";
     h.state_mut().run_button_script(id, "web", script);
     h.run_steps(3);
-    assert_eq!(h.state().pending_link, pending("https://example.org/?q=first", LinkOrigin::Script), "one dialog, for the first request");
+    assert_eq!(h.state().pending_link, None);
     assert_eq!(h.state().last_opened_url, None);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some("https://example.org/second"));
 }
 
 #[test]
@@ -359,43 +346,38 @@ fn an_email_link_cannot_attach_a_local_file() {
     }
 }
 
-/// Ask to open `url` from a script and return the harness with the prompt showing.
-fn prompt_for(url: &str) -> Harness<'static, PdfCraftApp> {
+/// Ask to open `url` from a script. This copy records it and opens nothing.
+fn refused(url: &str) -> Harness<'static, PdfCraftApp> {
     let mut h = harness();
     let id = h.state().views[0].id;
     let script = format!("app.launchURL({});", serde_json::to_string(url).unwrap());
     h.state_mut().run_button_script(id, "web", &script);
     h.run_steps(3);
-    assert_eq!(h.state().pending_link, pending(url, LinkOrigin::Script));
+    assert_eq!(h.state().pending_link, None);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some(url));
+    assert_eq!(h.state().last_opened_url, None);
     h
 }
 
 #[test]
-fn a_lookalike_host_is_shown_in_punycode_and_flagged() {
+fn a_lookalike_host_is_refused_without_a_prompt() {
     let _gpu = gpu();
-    // `pаypal.com` with a Cyrillic `а` (U+0430).
-    let h = prompt_for("https://p\u{0430}ypal.com/login");
-    h.get_by_label("xn--pypal-4ve.com");
-    assert_eq!(h.query_all_by_label_contains("p\u{0430}ypal.com").count(), 1, "only the full address shows the lookalike form");
-    h.get_by_label_contains("mixes letters from different alphabets");
+    let h = refused("https://p\u{0430}ypal.com/login");
+    assert!(h.query_by_label("Open link").is_none());
 }
 
 #[test]
-fn an_international_host_is_shown_in_punycode_and_marked() {
+fn an_international_host_is_refused_without_a_prompt() {
     let _gpu = gpu();
-    let h = prompt_for("https://bücher.example/");
-    h.get_by_label("xn--bcher-kva.example");
-    assert_eq!(h.query_all_by_label_contains("bücher.example").count(), 1, "only the full address shows the Unicode form");
-    h.get_by_label_contains("letters from another alphabet");
-    assert!(h.query_by_label_contains("mixes letters").is_none());
+    let h = refused("https://bücher.example/");
+    assert!(h.query_by_label("Open link").is_none());
 }
 
 #[test]
-fn a_numeric_host_is_shown_as_the_address_it_goes_to() {
+fn a_numeric_host_is_refused_without_a_prompt() {
     let _gpu = gpu();
-    let h = prompt_for("http://3232235777/admin");
-    h.get_by_label("192.168.1.1");
-    assert!(h.query_by_label_contains("alphabet").is_none());
+    let h = refused("http://3232235777/admin");
+    assert!(h.query_by_label("Open link").is_none());
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -632,37 +614,28 @@ fn overlapping_annotation_harness(bytes: Vec<u8>) -> Harness<'static, PdfCraftAp
 }
 
 #[test]
-fn highlighted_link_still_requires_confirmation() {
+fn highlighted_link_is_refused_without_opening() {
     let _gpu = gpu();
     let mut h = overlapping_annotation_harness(overlapping_annotation_fixture("Highlight", false));
     click_link(&mut h);
-    assert_eq!(h.state().pending_link, pending(LINK_URL, LinkOrigin::Link));
+    assert_eq!(h.state().pending_link, None);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some(LINK_URL));
     assert_eq!(h.state().last_opened_url, None);
     assert_eq!(h.state().views[0].comments.selected, None);
-    h.get_by_label("Open link").click();
     h.run_steps(3);
-    assert_eq!(h.state().last_opened_url.as_deref(), Some(LINK_URL));
-    assert_eq!(h.state().pending_link, None);
-    h.run_steps(3);
-    assert_eq!(h.state().pending_link, None, "approval must not create another prompt");
+    assert_eq!(h.state().last_opened_url, None);
 }
 
 #[test]
-fn highlighted_link_cancel_and_escape_do_not_open_url() {
+fn highlighted_link_escape_does_not_open_url() {
     let _gpu = gpu();
-    for escape in [false, true] {
-        let mut h = overlapping_annotation_harness(overlapping_annotation_fixture("Highlight", false));
-        click_link(&mut h);
-        assert_eq!(h.state().pending_link, pending(LINK_URL, LinkOrigin::Link));
-        if escape {
-            h.key_press(egui::Key::Escape);
-        } else {
-            h.get_by_label("Cancel").click();
-        }
-        h.run_steps(3);
-        assert_eq!(h.state().pending_link, None);
-        assert_eq!(h.state().last_opened_url, None);
-    }
+    let mut h = overlapping_annotation_harness(overlapping_annotation_fixture("Highlight", false));
+    click_link(&mut h);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some(LINK_URL));
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+    assert_eq!(h.state().pending_link, None);
+    assert_eq!(h.state().last_opened_url, None);
 }
 
 #[test]
@@ -709,11 +682,8 @@ fn form_widget_keeps_priority_over_highlighted_link() {
     let _gpu = gpu();
     let mut h = overlapping_annotation_harness(overlapping_annotation_fixture_with_form("Highlight", false, true));
     click_link(&mut h);
-    assert_eq!(h.state().pending_link, pending(BUTTON_URL, LinkOrigin::Button));
-    assert_eq!(h.state().last_opened_url, None);
-    h.get_by_label("Cancel").click();
-    h.run_steps(3);
     assert_eq!(h.state().pending_link, None);
+    assert_eq!(h.state().last_blocked_url.as_deref(), Some(BUTTON_URL));
     assert_eq!(h.state().last_opened_url, None);
 }
 
@@ -747,16 +717,13 @@ fn highlighted_link_context_click_selects_comment_without_opening_url() {
 }
 
 #[test]
-fn highlighted_link_can_be_requested_again_after_cancel() {
+fn highlighted_link_can_be_refused_again() {
     let _gpu = gpu();
     let mut h = overlapping_annotation_harness(overlapping_annotation_fixture("Highlight", false));
     for _ in 0..2 {
         click_link(&mut h);
-        assert_eq!(h.state().pending_link, pending(LINK_URL, LinkOrigin::Link));
-        assert_eq!(h.state().last_opened_url, None);
-        h.get_by_label("Cancel").click();
-        h.run_steps(120);
         assert_eq!(h.state().pending_link, None);
+        assert_eq!(h.state().last_blocked_url.as_deref(), Some(LINK_URL));
         assert_eq!(h.state().last_opened_url, None);
     }
 }

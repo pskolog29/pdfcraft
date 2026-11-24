@@ -1013,7 +1013,7 @@ fn right_click(h: &mut Harness<'_, PdfCraftApp>, p: egui::Pos2) {
 }
 
 fn pending_url(h: &Harness<'_, PdfCraftApp>) -> Option<String> {
-    h.state().pending_link.as_ref().map(|l| l.url.clone())
+    h.state().pending_link.as_ref().map(|l| l.url.clone()).or_else(|| h.state().last_blocked_url.clone())
 }
 
 /// Of two stacked links the Link tool selects the one drawn on top, the one the Select tool

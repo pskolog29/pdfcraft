@@ -1545,6 +1545,74 @@ fn date_languages_are_the_interface_languages() {
     assert_eq!(dates, interface);
 }
 
+/// The desktop Turkish overlay covers every command, history wording and tool name the menus
+/// show. It looks the phrases up directly, so the process-wide Turkish flag stays off and the
+/// other tests keep seeing English.
+#[test]
+fn product_turkish_covers_every_menu_wording() {
+    use pdfcraft_engine::catalog::{TOOL_CATEGORIES, TOOL_GROUPS};
+    use pdfcraft_engine::commands::COMMANDS;
+    use pdfcraft_engine::{BATCH_LABELS, EDIT_LABELS};
+
+    let mut sources = Vec::new();
+    for command in COMMANDS {
+        sources.push(command.label);
+    }
+    sources.extend(EDIT_LABELS.iter().copied());
+    sources.extend(BATCH_LABELS.iter().copied());
+    for group in TOOL_GROUPS {
+        sources.push(group.label);
+        for section in group.sections {
+            sources.push(section.title);
+            for item in section.items {
+                sources.push(item.label);
+            }
+        }
+    }
+    for category in TOOL_CATEGORIES {
+        sources.push(category.label);
+    }
+    for extra in [
+        "Undo {action}",
+        "Redo {action}",
+        "Change {key}",
+        "Title",
+        "Author",
+        "Subject",
+        "Keywords",
+        "Creator",
+        "Producer",
+        "Delete {n} field",
+        "Delete {n} fields",
+        "Rotate view clockwise",
+        "Rotate view counterclockwise",
+        "Search tools and commands…",
+        "Search tools and commands",
+        "Search tools…",
+        "Recover unsaved documents?",
+        "just now",
+        "{n} min ago",
+        "{n} h ago",
+        "Recover",
+        "Discard",
+        "Print ({key})",
+        "Save ({key})",
+        "Previous page",
+        "Next page",
+        "Select (V)",
+        "Hand (H)",
+        "Highlight",
+        "Draw",
+        "Add {what}",
+        "signature",
+        "initials",
+    ] {
+        sources.push(extra);
+    }
+    let missing: Vec<&str> = sources.into_iter().filter(|source| tr_overlay::phrase(source).is_none()).collect();
+    assert!(missing.is_empty(), "Turkish overlay is missing menu wordings: {missing:?}");
+}
+
 /// A report, not a check: the notifications pasting an image and pinning a tool show, in each
 /// language that has no translation for them yet (they show in English).
 #[test]

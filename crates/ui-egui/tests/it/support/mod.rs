@@ -51,11 +51,22 @@ pub fn wait_until(h: &mut Harness<'static, PdfCraftApp>, what: &str, ready: impl
     );
 }
 
-/// Open the in-window menu bar's `title` menu (File, Edit, View…).
+/// Open a top menu (File, Edit, Pages, View…). The titles stay in the bar; choosing one shows
+/// its tools in the strip underneath.
 pub fn open_menu(h: &mut Harness<'static, PdfCraftApp>, title: &str) {
-    use egui_kittest::kittest::Queryable;
-    h.get_by(|n| n.role() == egui::accesskit::Role::MenuItem && n.label().as_deref() == Some(title)).click();
-    h.run_steps(2);
+    use egui_kittest::kittest::{NodeT, Queryable};
+    let item = |label: &str| {
+        let label = label.to_owned();
+        move |n: &egui_kittest::kittest::AccessKitNode<'_>| {
+            n.role() == egui::accesskit::Role::MenuItem && n.label().as_deref() == Some(label.as_str())
+        }
+    };
+    let header = h.get_by(item(title));
+    // A second click on an open title would close its strip.
+    if header.accesskit_node().data().is_expanded() != Some(true) {
+        header.click();
+        h.run_steps(2);
+    }
 }
 
 /// The menu row labelled `label` in an open menu.
