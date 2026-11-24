@@ -2244,18 +2244,27 @@ fn switching_modes_keeps_the_current_page_at_fixed_zoom() {
 }
 
 #[test]
-fn the_menu_bar_is_one_accordion() {
+fn the_top_menus_open_a_horizontal_strip() {
     use egui_kittest::kittest::Queryable;
     let mut h = harness(&[]);
     let menu_item = |label: &'static str| {
         move |n: &egui_kittest::kittest::AccessKitNode<'_>| n.role() == egui::accesskit::Role::MenuItem && n.label().as_deref() == Some(label)
     };
-    assert_eq!(h.query_all_by(menu_item("File")).count(), 0, "File stays inside the Menu button");
+    assert!(h.query_all_by(menu_item("File")).count() >= 1, "the titles stay in the top bar");
+    assert_eq!(h.query_all_by(menu_item("Sign")).count(), 0, "Sign is not a top menu");
+    assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "tools stay hidden until the menu opens");
     crate::support::open_menu(&mut h, "File");
-    crate::support::menu_row(&h, "Save");
+    let open = crate::support::menu_row(&h, "Open…").rect();
+    let save = crate::support::menu_row(&h, "Save").rect();
+    let file = h.get_by(menu_item("File")).rect();
+    assert!(save.left() > open.right() - 1.0, "Save sits to the right of Open: {open:?} {save:?}");
+    assert!((save.top() - open.top()).abs() < 8.0, "the tools share one horizontal strip");
+    assert!(open.top() + 1.0 >= file.bottom(), "the strip opens under the titles: {file:?} {open:?}");
     crate::support::open_menu(&mut h, "Edit");
     crate::support::menu_row(&h, "Preferences…");
     assert_eq!(h.query_all_by(menu_item("Save")).count(), 0, "opening Edit closes File");
+    crate::support::open_menu(&mut h, "Pages");
+    crate::support::menu_row(&h, "Delete pages");
 }
 
 #[test]
@@ -2270,11 +2279,8 @@ fn long_view_menu_fits_a_short_window() {
     h.run_steps(8);
     crate::support::open_menu(&mut h, "View");
     h.run_steps(2);
-    crate::support::menu_row(&h, "Rotate view").hover();
-    h.event(wheel(MouseWheelUnit::Point, -1000.0, TouchPhase::Move));
-    h.run_steps(6);
     let after = crate::support::menu_row(&h, "Side panels").rect().bottom();
-    assert!(after <= 400.0, "the menu scrolls Side panels into view: {after}");
+    assert!(after <= 400.0, "Side panels stays inside the short window: {after}");
     crate::support::menu_row(&h, "Side panels").hover();
     h.run_steps(4);
     // The navigation rail has a Bookmarks button too; click the submenu's radio item.

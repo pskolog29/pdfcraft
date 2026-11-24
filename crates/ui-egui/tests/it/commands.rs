@@ -309,13 +309,11 @@ fn palette_arrow_keys_select_results_and_enter_runs_the_selection() {
     assert_eq!(app.session.get(app.views[0].id).unwrap().info.pages[0].rotation, 270);
 }
 
-/// Check that choosing Edit ▸ Pages ▸ Delete pages in the menu bar reduces the page count once.
+/// Check that choosing Pages ▸ Delete pages in the menu bar reduces the page count once.
 #[test]
 fn the_pages_menu_comes_from_the_registry() {
     let mut h = harness();
-    support::open_menu(&mut h, "Edit");
-    support::menu_row(&h, "Pages").hover();
-    h.run_steps(3);
+    support::open_menu(&mut h, "Pages");
     support::menu_row(&h, "Delete pages").click();
     h.run_steps(3);
     let app = h.state();
