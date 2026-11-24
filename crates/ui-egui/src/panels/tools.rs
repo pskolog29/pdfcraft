@@ -80,6 +80,9 @@ fn all_tools(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens) {
         clear_of_scrollbar(ui);
         ui.add_space(2.0);
         for cat in catalog::TOOL_CATEGORIES {
+            if cat.groups.iter().all(|id| super::hidden_tool_group(id)) {
+                continue;
+            }
             section(app, ui, t, cat);
         }
     });
@@ -107,6 +110,9 @@ fn section(app: &mut PdfCraftApp, ui: &mut egui::Ui, t: &Tokens, cat: &catalog::
         return;
     }
     for gid in cat.groups {
+        if super::hidden_tool_group(gid) {
+            continue;
+        }
         let Some(g) = catalog::group(gid) else { continue };
         let (row, pin_clicked) = tool_row(ui, t, g, app.is_tool_pinned(g.id));
         if pin_clicked {

@@ -130,7 +130,7 @@ fn dialogs(app: &mut PdfCraftApp, ctx: &egui::Context) {
     let modal = widgets::show_modal(ctx, "dialog", |ui| {
         ui.set_width(match dialog {
             Dialog::Properties(_) => 640.0,
-            Dialog::Print => 700.0,
+            Dialog::Print => 920.0,
             Dialog::FieldProps | Dialog::BulkFieldProps => 600.0,
             Dialog::Preferences => 610.0,
             Dialog::About => 820.0,
@@ -1329,10 +1329,11 @@ fn dialog_print(ui: &mut egui::Ui, app: &mut PdfCraftApp, req: &mut Pending) -> 
         ui.ctx().pixels_per_point(),
         ui.ctx().input(|i| i.max_texture_side) as f32,
     );
+    let file_name = doc.name.clone();
     let view = &mut app.views[i];
     view.set_print_grayscale(app.print_draft.grayscale);
     view.queue_print_previews(&rasters);
-    let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &sizes, &labels, &mut |p| {
+    let (go, cancel) = crate::print_ui::body(ui, &mut app.print_draft, &t, &file_name, &sizes, &labels, &mut |p| {
         view.need_thumbnail(p, true);
         view.page_preview(p)
     });

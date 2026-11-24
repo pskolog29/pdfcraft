@@ -27,6 +27,12 @@ pub use right::right_panel;
 pub use tools::left_panel;
 pub(crate) use tools::panel_header;
 
+/// Form filling and the accessibility checker stay out of the tool lists. Their commands still run
+/// when something else asks for them, so a document that already has fields can still be edited.
+pub(super) fn hidden_tool_group(id: &str) -> bool {
+    matches!(id, "form" | "fill_sign" | "accessibility")
+}
+
 // ───────────────────────────────────────────────────────────────────────────── right panels
 
 pub(crate) enum Nav {

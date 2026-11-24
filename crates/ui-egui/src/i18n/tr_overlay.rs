@@ -59,6 +59,11 @@ pub(super) fn phrase(english: &str) -> Option<&'static str> {
         "Copies:" => "Kopya:",
         "Collate" => "Harmanla",
         "Print in grayscale" => "Gri tonlamada yazdır",
+        "Center on page" => "Sayfada ortala",
+        "Auto-rotate pages" => "Sayfaları otomatik döndür",
+        "Use it when a printer skips text, shading or transparency. The print is no longer searchable text; with Print in grayscale, the pictures are grey." => {
+            "Yazıcı metni, gölgeyi veya saydamlığı atladığında kullanın. Baskı artık aranabilir metin olmaz; gri tonlamada resimler gri çıkar."
+        }
         "Two-sided:" => "Çift yüz:",
         "Printer default" => "Yazıcı varsayılanı",
         "Off" => "Kapalı",

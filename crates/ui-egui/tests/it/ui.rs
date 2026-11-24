@@ -122,7 +122,11 @@ fn every_catalog_tool_is_listed_in_the_sidebar() {
         assert!(h.query_all_by_label(c.label).count() >= 1, "category {} missing", c.label);
     }
     for g in pdfcraft_engine::catalog::TOOL_GROUPS {
-        assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from All tools", g.label);
+        if matches!(g.id, "form" | "fill_sign" | "accessibility") {
+            assert!(h.query_by_label(g.label).is_none(), "tool {} stays out of the sidebar", g.label);
+        } else {
+            assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from All tools", g.label);
+        }
     }
     assert!(h.query_by_label("View more").is_none());
 }
@@ -137,7 +141,11 @@ fn expanded_all_tools_lists_every_tool_by_category_and_searches() {
         h.get_by_label(c.label);
     }
     for g in pdfcraft_engine::catalog::TOOL_GROUPS {
-        assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from the expanded view", g.label);
+        if matches!(g.id, "form" | "fill_sign" | "accessibility") {
+            assert!(h.query_by_label(g.label).is_none(), "tool {} stays out of the expanded view", g.label);
+        } else {
+            assert!(h.query_all_by_label(g.label).count() >= 1, "tool {} missing from the expanded view", g.label);
+        }
     }
     // An item name finds its tool; the other categories drop out.
     h.state_mut().all_tools_query = "rotate".into();
